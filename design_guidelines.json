@@ -1,0 +1,213 @@
+{
+  "app_name": "SubMind",
+  "personality": "2 Material You / Expressive (infused with 6 Glass / Luxe surfaces)",
+  "personality_one_liner": "A premium, intelligent finance companion that feels fluid, vibrant, and incredibly smart, balancing expressive tonal richness with glass-like clarity.",
+  "color": {
+    "surface": "#F8F9FA",
+    "onSurface": "#111118",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#1A1A24",
+    "surfaceTertiary": "#EEF0F4",
+    "onSurfaceTertiary": "#4A4A58",
+    "surfaceInverse": "#111118",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#5B45FF",
+    "onBrand": "#FFFFFF",
+    "brandPrimary": "#5B45FF",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#00D2A6",
+    "onBrandSecondary": "#003B2E",
+    "brandTertiary": "#FF8C7A",
+    "onBrandTertiary": "#4A150D",
+    "success": "#10B981",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#FFFFFF",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#3B82F6",
+    "onInfo": "#FFFFFF",
+    "border": "#E2E4E9",
+    "borderStrong": "#C2C6D1",
+    "divider": "#EDF0F5",
+    "muted": "#6B7280",
+    "dark": {
+      "surface": "#0A0A10",
+      "onSurface": "#FFFFFF",
+      "surfaceSecondary": "#161622",
+      "onSurfaceSecondary": "#F3F4F6",
+      "surfaceTertiary": "#212130",
+      "onSurfaceTertiary": "#D1D5DB",
+      "surfaceInverse": "#FFFFFF",
+      "onSurfaceInverse": "#0A0A10",
+      "brand": "#7B6AFE",
+      "onBrand": "#FFFFFF",
+      "brandPrimary": "#7B6AFE",
+      "onBrandPrimary": "#FFFFFF",
+      "brandSecondary": "#23EAA9",
+      "onBrandSecondary": "#003B2E",
+      "brandTertiary": "#FFA394",
+      "onBrandTertiary": "#4A150D",
+      "success": "#34D399",
+      "onSuccess": "#064E3B",
+      "warning": "#FBBF24",
+      "onWarning": "#78350F",
+      "error": "#F87171",
+      "onError": "#7F1D1D",
+      "border": "#2B2B3C",
+      "borderStrong": "#3F3F56",
+      "divider": "#1F1F2E",
+      "muted": "#9CA3AF"
+    }
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Geist",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous tonal spacing. Elements group conceptually rather than with hard borders.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "pill": 999
+  },
+  "shadow_tier": 0,
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use heavy glass effect (expo-blur) on the bottom tab bar and central + FAB background.",
+      "Use glass overlays on hero cards paired with subtle background gradients.",
+      "Use glass for sticky header backgrounds when content scrolls beneath."
+    ],
+    "dont's": [
+      "Don't apply glass to every single list row or card.",
+      "Don't use glass without a translucent tint layer behind text to guarantee readability."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "A smart dashboard providing a high-level financial overview and quick access to insights.",
+      "states": {
+        "loading": "Skeleton cards mimicking layout.",
+        "empty": "N/A - Core app dashboard, falls back to zero-state onboarding prompts.",
+        "error": "Failed to load insights. Tap to retry."
+      },
+      "layout": "Large hero insight card at the top (abstract gradient bg + glass overlay + vertical text). Below: horizontally scrolling 'Renewals in 30 days' chips. Followed by multi-column grid of 'Recent Links' and watchlist preview. Sticky bottom tab bar."
+    },
+    {
+      "name": "Subscriptions",
+      "purpose": "List and detailed management of recurring costs.",
+      "states": {
+        "loading": "List of skeleton rows.",
+        "empty": "Illustration of empty wallet with 'No active subscriptions found' and primary CTA to add.",
+        "error": "Could not sync subscriptions."
+      },
+      "layout": "Sticky segmented control (Active / Watchlist) below a glass header. Single column list rows for subscriptions using realistic PNG logos fetched in real-time. Each card isolates its info: Name, Amount, Next Renewal. Bottom padding ensures list clears the tab bar."
+    },
+    {
+      "name": "Smart Inbox",
+      "purpose": "Triage center for AI-extracted plans, links, and subscriptions.",
+      "states": {
+        "loading": "Spinner centered.",
+        "empty": "Illustration of an empty tray. 'Inbox Zero! All items processed.'",
+        "error": "Error loading inbox items."
+      },
+      "layout": "Tabs for All / Needs Review / Duplicates. List view focuses on direct-action triage controls: swipe to accept/reject or inline buttons (Add/Merge/Ignore). Use confidence-based badges (e.g., '95% Match' in brandSecondary) on each card."
+    },
+    {
+      "name": "Knowledge Graph",
+      "purpose": "Visual, interactive node graph connecting subscriptions, links, and tags.",
+      "states": {
+        "loading": "Pulsing central node.",
+        "empty": "Add data to see your brain map.",
+        "error": "Graph engine failed to render."
+      },
+      "layout": "Full-screen canvas area using React Native Skia/Reanimated physics graph (or matrix layout for performance). Nodes are rounded pills or circles. Use floating action buttons for zooming/resetting view. The header should be glassy so the graph flows underneath."
+    },
+    {
+      "name": "Ask AI",
+      "purpose": "Natural language Q&A interface.",
+      "states": {
+        "loading": "AI thinking bubble animation.",
+        "empty": "Suggested prompt chips.",
+        "error": "AI failed to respond. Retry."
+      },
+      "layout": "Standard chat UI. User messages right-aligned (brandTertiary tint), AI left-aligned (surfaceSecondary). Large, glassy sticky voice input (Mic) FAB anchored to the bottom alongside text input."
+    },
+    {
+      "name": "Action Bottom Sheet",
+      "purpose": "Central '+' hub to add any type of data.",
+      "states": {
+        "loading": "N/A",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Triggered by the center tab bar FAB. Uses @gorhom/bottom-sheet. Grid of action tiles: Scan Screenshot, Choose Photo, Paste Link, Add Sub. High visual hierarchy, rounded icons on surfaceTertiary."
+    }
+  ],
+  "images": {
+    "netflix_logo": {
+      "url": "https://images.unsplash.com/photo-1637363990764-de84fd247b7d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwxfHxOZXRmbGl4JTIwbG9nbyUyMHBuZyUyMHRyYW5zcGFyZW50fGVufDB8fHx8MTc4OTg4NzU3NXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Netflix Logo"
+    },
+    "spotify_logo": {
+      "url": "https://images.unsplash.com/photo-1617722694278-84453e1719a8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTN8MHwxfHNlYXJjaHwxfHxTcG90aWZ5JTIwbG9nbyUyMHRyYW5zcGFyZW50JTIwcG5nfGVufDB8fHx8MTc4OTg4NzU3NXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Spotify Logo"
+    },
+    "amazon_prime_logo": {
+      "url": "https://images.unsplash.com/photo-1648091856220-fbe246f2ad94?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzR8MHwxfHNlYXJjaHwxfHxBbWF6b24lMjBQcmltZSUyMGxvZ28lMjB0cmFuc3BhcmVudCUyMHBuZ3xlbnwwfHx8fDE3ODk4ODc1NzR8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Amazon Prime Logo"
+    },
+    "hero_abstract_bg": {
+      "url": "https://images.unsplash.com/photo-1638742385167-96fc60e12f59?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwxfHxQcmVtaXVtJTIwbW9kZXJuJTIwZ3JhZGllbnQlMjBhYnN0cmFjdCUyMHNvZnQlMjAzZCUyMHNoYXBlc3xlbnwwfHx8fDE3ODk4ODc1NzV8MA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1638742385167-96fc60e12f59?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwxfHxQcmVtaXVtJTIwbW9kZXJuJTIwZ3JhZGllbnQlMjBhYnN0cmFjdCUyMHNvZnQlMjAzZCUyMHNoYXBlc3xlbnwwfHx8fDE3ODk4ODc1NzV8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Premium abstract gradient shapes for hero background"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color palette tokens. I've allowed 'Indigo/Purple' since it was explicitly requested, but it's balanced with Mint and Peach to avoid the 'generic AI slop' look.",
+    "Implement the 'Material You / Expressive' spacing and radius (rounded cards up to 24pt). Avoid heavy drop shadows; rely on tonal separation (`surface` vs `surfaceSecondary`).",
+    "Use glassmorphism selectively but intentionally: the bottom tab bar, sticky headers over scrolling lists, and the central FAB should use `expo-blur`.",
+    "For the Smart Inbox, implement inline triage controls (accept/reject/merge) on the cards so users don't have to navigate to a detail screen to process extracted data.",
+    "For the Knowledge Graph screen, implement a high-performance visual map. A CSS-Grid/Matrix layout or a Reanimated Skia layout is highly recommended for mobile performance over heavy DOM-based D3.",
+    "Ensure all lists have a bottom inset to clear the translucent bottom tab bar."
+  ],
+  "haptics": {
+    "primary_button_press": "impactLight",
+    "tab_switch": "selection",
+    "swipe_action_commit": "impactMedium",
+    "inbox_triage_accept": "notificationSuccess",
+    "graph_node_tap": "impactLight"
+  }
+}

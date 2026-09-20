@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "SubMind",
+    "slug": "frontend",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "submind",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.emergent.subscriptionvault.z533ca",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan subscription screenshots and receipts",
+        "NSPhotoLibraryUsageDescription": "Import subscription screenshots to extract details",
+        "NSMicrophoneUsageDescription": "Ask SubMind questions using your voice"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.emergent.subscriptionvault.z533ca",
+      "permissions": ["CAMERA", "RECORD_AUDIO", "READ_MEDIA_IMAGES"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-image.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#141319"
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-status-bar",
+      "expo-audio",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Import subscription screenshots to extract details",
+          "cameraPermission": "Scan subscription screenshots and receipts"
+        }
+      ],
+      "@react-native-vector-icons/material-design-icons"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
