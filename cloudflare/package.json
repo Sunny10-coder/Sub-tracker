@@ -1,0 +1,21 @@
+{
+  "name": "subtracker-cloud-intelligence",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test mcp-server/tests/*.test.js",
+    "deploy:auth": "wrangler deploy --config auth-server/wrangler.jsonc",
+    "deploy:mcp": "wrangler deploy --config mcp-server/wrangler.jsonc",
+    "db:local": "wrangler d1 migrations apply subtracker-intelligence --local --config mcp-server/wrangler.jsonc",
+    "db:remote": "wrangler d1 migrations apply subtracker-intelligence --remote --config mcp-server/wrangler.jsonc"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^2.0.0",
+    "@modelcontextprotocol/server": "2.3.1",
+    "agents": "^0.20.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
