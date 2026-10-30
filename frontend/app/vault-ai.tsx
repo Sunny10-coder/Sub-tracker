@@ -1,51 +1,47 @@
 import { useRouter } from "expo-router";
-import { ScrollView, Text, View, Pressable } from "react-native";
+import { ScrollView, View, Text, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppHeader, Card, Icon } from "@/src/components/ui";
-import { makeStyles, useTheme } from "@/src/theme";
+import { Icon } from "@/src/components/ui";
+import { METRO, MetroBrand, MetroSection, MetroTile, useLiveMetroIndex } from "@/src/components/metro-tiles";
 
-const MODULES = [
- {heading:"Brain Map", description:"See connected accounts, subscriptions, tools, and opportunities", icon:"graph", route:"/graph", tone:"brandSecondary"},
- {heading:"Promo Vault", description:"Find, save and check discount codes and benefits", icon:"ticket-percent", route:"/promo-vault", tone:"brandTertiary"},
- {heading:"AI Prompts", description:"Your reusable AI instructions, saved workflows and scripts", icon:"auto-fix", route:"/prompt-vault", tone:"brandPrimary"},
- {heading:"Ask SubMind AI", description:"Ask about your tools, costs, renewals and benefits", icon:"robot-outline", route:"/(tabs)/ai", tone:"brandSecondary"},
- {heading:"Deals & Plans", description:"Research pricing, trials and offers for any tool", icon:"magnify-scan", route:"/deals", tone:"brandTertiary"},
- {heading:"Link Vault", description:"Your saved links, reviews and revisit reminders", icon:"bookmark-multiple-outline", route:"/link-vault", tone:"brandPrimary"},
- {heading:"Watchlist", description:"Compare plans you might subscribe to later", icon:"eye-outline", route:"/watchlist", tone:"brandSecondary"},
- {heading:"Inbox & Capture", description:"Review AI-extracted screenshots and imported text", icon:"inbox-arrow-down-outline", route:"/(tabs)/inbox", tone:"brandTertiary"},
-];
 export default function VaultAI() {
- const router=useRouter();const {colors}=useTheme();const styles=useStyles();const insets=useSafeAreaInsets();
- return <View style={styles.container}>
-  <AppHeader title="Vault & AI" subtitle="Choose the intelligence tool you need" back/>
-  <ScrollView contentContainerStyle={{padding:18,paddingBottom:insets.bottom+35,gap:14}}>
-    <Card style={styles.hero}>
-      <Text style={styles.eyebrow}>SECONDARY WORKSPACE</Text>
-      <Text style={styles.title}>Your digital intelligence vault</Text>
-      <Text style={styles.sub}>Subscriptions, Accounts, Renewals and Spending stay in your main navigation. These tools are available whenever you choose them.</Text>
-    </Card>
-    <View style={styles.grid}>{MODULES.map((item)=> <Pressable key={item.heading}
-       testID={"vault-"+item.heading} accessibilityRole="button" accessibilityLabel={item.heading}
-       onPress={()=>router.push(item.route as any)} style={styles.tile}>
-       <View style={[styles.icon,{backgroundColor:(colors as any)[item.tone]+"1C"}]}>
-         <Icon name={item.icon} color={(colors as any)[item.tone]} size={28}/>
-       </View>
-       <Text style={styles.name}>{item.heading}</Text>
-       <Text style={styles.desc}>{item.description}</Text>
-       <Icon name="arrow-top-right" color={colors.muted} size={16}/>
-     </Pressable>)}</View>
+ const router=useRouter(); const insets=useSafeAreaInsets(); const live=useLiveMetroIndex(3,11800);
+ const open=(s:string)=>router.push(s as any);
+ const aiHints=["Ask about costs, renewals and benefits","Find subscriptions with overlapping features","Explore your saved tools and ideas"];
+ return <View style={{flex:1,backgroundColor:METRO.black}}>
+  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{paddingTop:insets.top+10,paddingHorizontal:14,paddingBottom:insets.bottom+35}}>
+   <View style={{flexDirection:"row",alignItems:"center",gap:12,marginBottom:12}}>
+     <Pressable onPress={()=>router.canGoBack()?router.back():open("/(tabs)")} accessibilityLabel="Back" style={{height:42,width:35,justifyContent:"center"}}>
+       <Icon name="chevron-left" color={METRO.white} size={32}/>
+     </Pressable><MetroBrand word="VAULT & AI"/>
+   </View>
+   <Text style={{color:METRO.dim,fontSize:13,marginBottom:20}}>Your intelligence tools, one tap away.</Text>
+   <MetroTile color={METRO.green} title="ASK SUBMIND AI" icon="robot-outline"
+     subtitle={aiHints[live]} liveKey={live} horizontal height={138} onPress={()=>open("/(tabs)/ai")}
+     testID="metro-vault-ai"/>
+   <View style={{height:METRO.gap}}/>
+   <View style={{flexDirection:"row",gap:METRO.gap}}>
+    <MetroTile color={METRO.cyan} textColor={METRO.ink} icon="auto-fix" title="AI PROMPTS" subtitle="Save and reuse instructions" height={173} style={{flex:1}} onPress={()=>open("/prompt-vault")}/>
+    <MetroTile color={METRO.purple} icon="graph" title="BRAIN MAP" subtitle="Connections and insights" height={173} style={{flex:1}} onPress={()=>open("/graph")}/>
+   </View>
+   <View style={{height:METRO.gap}}/>
+   <MetroTile color={METRO.orange} textColor={METRO.ink} title="PROMO VAULT" icon="ticket-percent-outline"
+     subtitle="Codes, discounts, credits and benefits" horizontal height={118} onPress={()=>open("/promo-vault")}/>
+   <View style={{height:METRO.gap}}/>
+   <MetroTile color={METRO.cobalt} title="LINK VAULT" icon="bookmark-multiple-outline"
+     subtitle="Links, collections and revisit reminders" horizontal height={118} onPress={()=>open("/link-vault")}/>
+   <MetroSection title="Explore"/>
+   <View style={{flexDirection:"row",gap:METRO.gap}}>
+     <MetroTile color={METRO.pink} title="DEALS & PLANS" icon="sale" height={132} style={{flex:1}} onPress={()=>open("/deals")}/>
+     <MetroTile color={METRO.teal} title="WATCHLIST" icon="eye-outline" height={132} style={{flex:1}} onPress={()=>open("/watchlist")}/>
+   </View>
+   <View style={{height:METRO.gap}}/>
+   <MetroTile color={METRO.purple} title="INBOX & CAPTURE" icon="inbox-arrow-down-outline"
+      subtitle="Review screenshots and imported items" horizontal height={109} onPress={()=>open("/(tabs)/inbox")}/>
+   <View style={{height:METRO.gap}}/>
+   <MetroTile color={METRO.cyan} textColor={METRO.ink} title="SAVE ANYTHING" icon="plus"
+      subtitle="Capture link, subscription or a note" horizontal height={100} onPress={()=>open("/actions")}/>
+   <Text style={{textAlign:"center",color:"#858585",letterSpacing:1,marginTop:20,fontSize:10}}>SUBMIND METRO · YOUR DIGITAL VAULT</Text>
   </ScrollView>
- </View>;
+ </View>
 }
-const useStyles=makeStyles(c=>({
- container:{flex:1,backgroundColor:c.surface},
- hero:{backgroundColor:c.surfaceSecondary,gap:9,padding:23},
- eyebrow:{color:c.brandPrimary,fontSize:11,fontWeight:"800",letterSpacing:1.2},
- title:{fontSize:24,color:c.onSurface,fontWeight:"800",lineHeight:30},
- sub:{fontSize:13,color:c.muted,lineHeight:19},
- grid:{flexDirection:"row",flexWrap:"wrap",justifyContent:"space-between",gap:11},
- tile:{width:"48%",minHeight:190,backgroundColor:c.surfaceSecondary,borderRadius:21,borderColor:c.border,borderWidth:1,padding:15,gap:8},
- icon:{width:48,height:48,borderRadius:15,justifyContent:"center",alignItems:"center"},
- name:{fontSize:16,fontWeight:"800",color:c.onSurface},
- desc:{fontSize:11,lineHeight:16,color:c.muted,flex:1},
-}));
