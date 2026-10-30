@@ -2,36 +2,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { storage } from "@/src/utils/storage";
 import { getVault, localRequest } from "@/src/lib/local-vault";
+import * as direct from "@/src/lib/direct-providers";
 
-const DEFAULT_BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim().replace(/\/+$/, "");
-export const BACKEND_URL_STORAGE_KEY = "submind.backend_url";
-
-export async function getBackendUrl(): Promise<string> {
-  const configured = await storage.getItem(BACKEND_URL_STORAGE_KEY, "");
-  return (typeof configured === "string" && configured.trim() ? configured.trim() : DEFAULT_BACKEND_URL).replace(/\/+$/, "");
+async function req<T>(path:string,opts?:RequestInit):Promise<T>{
+ if(path.startsWith("/deals/search")){const q=new URLSearchParams(path.split("?")[1]||"");return direct.deals(q.get("q")||"") as T}
+ if(path==="/ai/chat"){const question=JSON.parse(String(opts?.body||"{}")).question;const vault=await getVault();
+ const context="You are SubMind. Answer strictly from provided user records when discussing account status, renewals or spending. If unknown say unknown. Do not assume prices or billing. Private data:\n"+JSON.stringify({subscriptions:vault.subscriptions.slice(0,250),accounts:vault.accounts.slice(0,150),benefits:vault.benefits.slice(0,100)}).slice(0,24000);
+ return direct.chat(question,context) as T}
+ if(path==="/ai/chat/history")return [] as T;
+ return localRequest<T>(path,opts);
 }
-
-async function req<T>(path: string, opts?: RequestInit): Promise<T> {
-  const baseUrl = await getBackendUrl();
-  // Once personal records have been imported, the phone remains the source of
-  // truth for all account/plan/vault records even when a remote AI backend exists.
-  const pathname = path.split("?")[0];
-  const localPrefixes = ["/subscriptions", "/accounts", "/insights", "/vault/dashboard",
-    "/links", "/watchlist", "/reminders", "/settings", "/inbox", "/graph", "/search",
-    "/deals/codes", "/deals/price-history", "/deals/track-price"];
-  const isLocalData = localPrefixes.some(prefix => pathname === prefix || pathname.startsWith(prefix + "/"));
-  if (!baseUrl || (isLocalData && !!(await getVault()).imported_at)) return localRequest<T>(path, opts);
-  const res = await fetch(`${baseUrl}/api${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status}: ${body}`);
-  }
-  return res.json();
-}
-
 export const api = {
   health: () => req<any>("/"),
   insights: () => req<any>("/insights"),
@@ -94,6 +74,8 @@ export const api = {
   patchSettings: (b: any) => req<any>("/settings", { method: "PATCH", body: JSON.stringify(b) }),
 
   transcribe: async (uri: string): Promise<{ text: string }> => {
+    throw Error("Voice transcription is not yet configured without a backend.");
+/*
     const form = new FormData();
     form.append("file", { uri, name: "voice.m4a", type: "audio/mp4" } as any);
     const baseUrl = await getBackendUrl();
@@ -101,7 +83,7 @@ export const api = {
     const res = await fetch(`${baseUrl}/api/stt/transcribe`, { method: "POST", body: form as any });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
-  },
+*/  },
 };
 
 // ------- hooks -------
