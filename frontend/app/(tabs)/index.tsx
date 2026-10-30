@@ -154,7 +154,7 @@ export default function Home() {
       <MetroSection title="More"/>
       <MetroTile color={METRO.purple} icon="view-dashboard" title="Vault & AI"
         subtitle="AI · Prompts · Brain Map · Promo codes · Saved links"
-        horizontal height={110} onPress={() => open("/(tabs)/vault")} testID="metro-vault-home"/>
+        horizontal height={110} onPress={() => open("/vault-ai")} testID="metro-vault-home"/>
       {total === 0 ? <Pressable onPress={() => open("/import-data")}
         style={{ marginTop: 12, padding: 13, backgroundColor: "#171717", borderWidth: 1, borderColor: METRO.cyan }}>
         <Text style={{ color: METRO.cyan, fontWeight: "900", fontSize: 15 }}>IMPORT YOUR PRIVATE TRACKER  →</Text>
