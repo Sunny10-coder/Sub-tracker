@@ -4,6 +4,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader, Card, Icon, PrimaryButton } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
+import { checkKey, models } from "@/src/lib/direct-providers";
+import { METRO } from "@/src/components/metro-tiles";
 
 const PROVIDERS=[
  {id:"gemini",name:"Google Gemini",subtitle:"AI extraction and summaries"},
@@ -20,13 +22,14 @@ export default function ApiKeys(){
  const [visible,setVisible]=useState(false);
  useEffect(()=>{Promise.all(PROVIDERS.map(async p=>[p.id,Boolean(await storage.secureGet(keyOf(p.id),""))] as const))
   .then(entries=>setConfigured(Object.fromEntries(entries)))},[]);
+ const test=async()=>{setBusy(true);setTestMessage("Testing provider...");try{const res=await checkKey(selected as any,value.trim()||undefined);setTestMessage(res);if(selected==="gemini"||selected==="groq"){if(!value.trim()){setModelList(await models(selected as "gemini"|"groq"));}}}catch(e:any){setTestMessage("Connection failed: "+e.message);}finally{setBusy(false)}};
  const save=async()=>{
   if(!value.trim())return;
   setBusy(true);
   try{
    if(!await storage.secureSet(keyOf(selected),value.trim()))throw Error("Secure storage write failed");
    setConfigured(v=>({...v,[selected]:true}));setValue("");setVisible(false);
-   Alert.alert("API key stored locally","The key is saved in Android secure storage. Provider calls are not yet connected to this local-first version.");
+   Alert.alert("API key saved","Saved on device. Tap Test connection to verify actual provider access.");
   }catch(e:any){Alert.alert("Unable to save",e?.message||"Storage error");}
   finally{setBusy(false)}
  };
@@ -58,10 +61,12 @@ export default function ApiKeys(){
        placeholder="Paste your private API key" placeholderTextColor={colors.muted}/>
      <Pressable onPress={()=>setVisible(!visible)} accessibilityLabel={visible?"Hide API key":"Show API key"}><Icon name={visible?"eye-off-outline":"eye-outline"} color={colors.muted} size={23}/></Pressable>
     </View>
+    <PrimaryButton title="Test connection" icon="wifi-check" variant="secondary" loading={busy} disabled={!value.trim()&&!configured[selected]} onPress={test}/>
+    {testMessage?<Text style={{color:testMessage.startsWith("Connection failed")?METRO.red:METRO.cyan,fontSize:13}}>{testMessage}</Text>:null}
     <PrimaryButton title="Save to Android secure storage" icon="lock-check-outline" disabled={!value.trim()} loading={busy} onPress={save}/>
     {configured[selected]?<PrimaryButton title="Remove stored key" icon="key-remove" variant="secondary" onPress={remove}/>:null}
    </Card>
-   <Text style={styles.muted}>Saving a key here does not automatically activate online AI or search features. Direct API integration and provider-specific key testing require a separate build. Never paste passwords or recovery phrases here.</Text>
+   <Text style={styles.muted}>Stored keys are used by Ask SubMind AI and Deals & Plans. A working key still needs provider quota, an enabled model, and internet. Never paste passwords or recovery phrases here.</Text>
   </ScrollView>
  </View>;
 }
@@ -69,9 +74,9 @@ const useStyles=makeStyles(c=>({
  container:{flex:1,backgroundColor:c.surface},title:{color:c.onSurface,fontWeight:"800",fontSize:17},
  muted:{color:c.muted,fontSize:12,lineHeight:19},
  row:{flexDirection:"row",alignItems:"center",gap:10},
- provider:{flexDirection:"row",alignItems:"center",gap:12,padding:17,borderRadius:19,backgroundColor:c.surfaceSecondary,borderWidth:1,borderColor:c.border},
+ provider:{flexDirection:"row",alignItems:"center",gap:12,padding:17,borderRadius:2,backgroundColor:c.surfaceSecondary,borderWidth:1,borderColor:c.border},
  name:{fontSize:15,color:c.onSurface,fontWeight:"800"},
  status:{fontSize:11,fontWeight:"800"},
- inputRow:{flexDirection:"row",alignItems:"center",gap:9,backgroundColor:c.surfaceTertiary,borderRadius:14,paddingHorizontal:12},
+ inputRow:{flexDirection:"row",alignItems:"center",gap:9,backgroundColor:c.surfaceTertiary,borderRadius:2,paddingHorizontal:12},
  input:{flex:1,paddingVertical:14,color:c.onSurface,fontSize:13},
 }));
