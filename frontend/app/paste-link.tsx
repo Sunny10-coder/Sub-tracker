@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
@@ -18,9 +18,10 @@ export default function PasteLink() {
   const styles = useStyles();
   const { colors } = useTheme();
   const router = useRouter();
+  const params = useLocalSearchParams<{url?: string}>();
   const insets = useSafeAreaInsets();
   const invalidate = useInvalidateAll();
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(params.url || "");
   const [note, setNote] = useState("");
   const [source, setSource] = useState("Website");
   const [reminderChoice, setReminderChoice] = useState<ReminderChoice>("None");
