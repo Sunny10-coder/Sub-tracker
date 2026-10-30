@@ -9,6 +9,9 @@ import { api } from "@/src/lib/api";
 import { AppHeader, Icon } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 import { TAB_BAR_SPACE } from "./_layout";
+import { chat as chatDirect, key as savedKey, models as fetchModels } from "@/src/lib/direct-providers";
+import { getVault } from "@/src/lib/local-vault";
+import { METRO } from "@/src/components/metro-tiles";
 
 const SUGGESTIONS = [
   "What renews this month?",
@@ -27,10 +30,14 @@ export default function AskAI() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
+  const [provider,setProvider]=useState<"gemini"|"groq"|"nvidia">("gemini");
+  const [available,setAvailable]=useState<string[]>([]);
+  const [model,setModel]=useState("");
   const [transcribing, setTranscribing] = useState(false);
   const listRef = useRef<FlatList>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
+  useEffect(()=>{(async()=>{try{if(provider!=="nvidia"){const list=await fetchModels(provider);setAvailable(list);setModel(list[0]||"")}else {setAvailable(["meta/llama-3.1-8b-instruct"]);setModel("meta/llama-3.1-8b-instruct")}}catch{setAvailable([]);setModel("")}})()},[provider]);
   useEffect(() => {
     api.chatHistory().then((h) => {
       const msgs: Msg[] = [];
@@ -40,7 +47,11 @@ export default function AskAI() {
   }, []);
 
   const chat = useMutation({
-    mutationFn: (q: string) => api.chat(q),
+    mutationFn: async(q: string) => {
+      const v=await getVault();
+      const context="You are SubMind. Use only the provided data for personal facts; never invent prices. Records: "+JSON.stringify({subscriptions:v.subscriptions.slice(0,120),accounts:v.accounts.slice(0,60),benefits:v.benefits.slice(0,60)}).slice(0,20000);
+      return chatDirect(q,context,provider,model||undefined);
+    },
     onMutate: (q) => {
       setMessages((m) => [...m, { role: "user", text: q }, { role: "ai", text: "", pending: true }]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
@@ -49,8 +60,8 @@ export default function AskAI() {
       setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "ai", text: res.answer }; return c; });
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
     },
-    onError: () => {
-      setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "ai", text: "Sorry, I couldn't answer that. Please try again." }; return c; });
+    onError: (error: Error) => {
+      setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "ai", text: error.message+"\nOpen Settings → API Keys to test and configure a provider." }; return c; });
     },
   });
 
@@ -94,7 +105,11 @@ export default function AskAI() {
 
   return (
     <View style={styles.container}>
-      <AppHeader title="Ask SubMind" subtitle="Answers from your own data" />
+      <AppHeader title="Ask SubMind" subtitle="Direct AI · Your own API key" />
+      <View style={{flexDirection:"row",gap:7,paddingHorizontal:16,paddingBottom:10}}>
+        {(["gemini","groq","nvidia"] as const).map(p=><Pressable key={p} onPress={()=>setProvider(p)} style={{flex:1,padding:11,backgroundColor:provider===p?METRO.cyan:"#222",alignItems:"center"}}><Text style={{color:provider===p?METRO.ink:"#fff",fontWeight:"800"}}>{p.toUpperCase()}</Text></Pressable>)}
+      </View>
+      {available.length>1?<View style={{paddingHorizontal:16,paddingBottom:9,flexDirection:"row",gap:7}}><Text style={{color:METRO.dim,fontSize:12,flex:1}} numberOfLines={1}>Model: {model||"Choose"}</Text><Pressable onPress={()=>{const i=available.indexOf(model);setModel(available[(i+1)%available.length])}}><Text style={{color:METRO.cyan,fontWeight:"700"}}>Change model →</Text></Pressable></View>:null}
       <KeyboardAvoidingView behavior="translate-with-padding" style={{ flex: 1 }} keyboardVerticalOffset={0}>
         {messages.length === 0 ? (
           <View style={styles.emptyWrap}>
@@ -155,21 +170,21 @@ export default function AskAI() {
 }
 
 const useStyles = makeStyles((colors) => ({
-  container: { flex: 1, backgroundColor: colors.surface },
+  container: { flex: 1, backgroundColor: METRO.black },
   emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28, gap: 10 },
   aiOrb: { width: 84, height: 84, borderRadius: 28, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   emptyTitle: { color: colors.onSurface, fontSize: 22, fontWeight: "800" },
   emptySub: { color: colors.muted, fontSize: 14, textAlign: "center", lineHeight: 20, marginBottom: 8 },
   suggestions: { gap: 8, width: "100%", marginTop: 8 },
-  suggestion: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 14 },
+  suggestion: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: 2, padding: 14 },
   suggestionText: { color: colors.onSurfaceSecondary, fontSize: 14, fontWeight: "600" },
-  bubble: { maxWidth: "85%", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12 },
+  bubble: { maxWidth: "85%", borderRadius: 2, paddingHorizontal: 16, paddingVertical: 12 },
   userBubble: { alignSelf: "flex-end", backgroundColor: colors.brandPrimary, borderBottomRightRadius: 6 },
   aiBubble: { alignSelf: "flex-start", backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 6 },
   bubbleText: { fontSize: 15, lineHeight: 21 },
   inputBar: { flexDirection: "row", alignItems: "flex-end", gap: 10, paddingHorizontal: 16, paddingTop: 10, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
-  inputWrap: { flex: 1, flexDirection: "row", alignItems: "flex-end", backgroundColor: colors.surfaceTertiary, borderRadius: 22, paddingLeft: 16, paddingRight: 6, paddingVertical: 6 },
+  inputWrap: { flex: 1, flexDirection: "row", alignItems: "flex-end", backgroundColor: colors.surfaceTertiary, borderRadius: 2, paddingLeft: 16, paddingRight: 6, paddingVertical: 6 },
   input: { flex: 1, color: colors.onSurface, fontSize: 15, maxHeight: 120, paddingVertical: 8 },
   micBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  sendBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  sendBtn: { width: 48, height: 48, borderRadius: 2, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
 }));
