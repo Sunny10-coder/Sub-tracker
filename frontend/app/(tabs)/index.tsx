@@ -20,15 +20,6 @@ const QUICK = [
   { icon: "bell-plus", label: "Remind", href: "/add-reminder", key: "accentGreen" },
 ];
 
-const SHORTCUTS = [
-  { icon: "wallet", label: "Subscriptions", href: "/(tabs)/subscriptions" },
-  { icon: "account-multiple", label: "Accounts", href: "/(tabs)/account-hub" },
-  { icon: "calendar-clock", label: "Renewals", href: "/(tabs)/renewals" },
-  { icon: "chart-donut", label: "Spending", href: "/(tabs)/spending" },
-  { icon: "brain", label: "Vault & AI", href: "/vault-ai" },
-  { icon: "file-import-outline", label: "Import Data", href: "/import-data" },
-  { icon: "server-network", label: "Online Backend (optional)", href: "/server-setup" },
-];
 
 export default function Home() {
   const styles = useStyles();
@@ -147,16 +138,6 @@ export default function Home() {
                 </Card>
               ))}
             </View>
-
-            {/* Shortcuts */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcutRow}>
-              {SHORTCUTS.map((s) => (
-                <Card key={s.label} style={styles.shortcut} onPress={() => router.push(s.href as any)} testID={`shortcut-${s.label}`}>
-                  <Icon name={s.icon} size={18} color={colors.onSurface} />
-                  <Text style={styles.shortcutLabel}>{s.label}</Text>
-                </Card>
-              ))}
-            </ScrollView>
 
             {/* Upcoming renewals */}
             <Section title="Upcoming renewals" onSeeAll={() => router.push("/(tabs)/renewals")}>
