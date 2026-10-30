@@ -26,7 +26,8 @@ const SHORTCUTS = [
   { icon: "calendar-clock", label: "Renewals", href: "/(tabs)/renewals" },
   { icon: "chart-donut", label: "Spending", href: "/(tabs)/spending" },
   { icon: "brain", label: "Vault & AI", href: "/vault-ai" },
-  { icon: "server-network", label: "Server Setup", href: "/server-setup" },
+  { icon: "file-import-outline", label: "Import Data", href: "/import-data" },
+  { icon: "server-network", label: "Online Backend (optional)", href: "/server-setup" },
 ];
 
 export default function Home() {
@@ -76,22 +77,20 @@ export default function Home() {
             {/* Expressive dark hero card */}
             <View style={styles.hero}>
               <Text style={styles.heroLead}>YOUR DIGITAL TOOLKIT · MONTHLY COMMITMENT</Text>
-              <Text style={styles.heroBig}>
-                You are spending{" "}
-                <Text style={[styles.hl, { color: colors.accentYellow }]}>{money(data?.monthly_spend, cur)}</Text>
-                <Text style={styles.heroBig}> a month across </Text>
-                <Text style={[styles.hl, { color: colors.accentGreen }]}>{data?.active_count ?? 0} subs</Text>
-                <Text style={styles.heroBig}>. </Text>
-                <Text style={[styles.hl, { color: colors.accentOrange }]}>{renews}</Text>
-                <Text style={styles.heroBig}> renew soon and </Text>
-                <Text style={[styles.hl, { color: colors.accentPink }]}>{trials} trials</Text>
-                <Text style={styles.heroBig}> are ending.</Text>
+              {Object.entries(vault.data?.monthly_by_currency || {}).length ? (
+                <View style={{ gap: 5 }}>
+                  {Object.entries(vault.data?.monthly_by_currency || {}).map(([currency, amount]) =>
+                    <Text key={currency} style={styles.heroBig}>
+                      <Text style={[styles.hl, { color: colors.accentYellow }]}>{money(amount as number, currency)}</Text>
+                      <Text style={styles.heroBig}> / month</Text>
+                    </Text>)}
+                </View>
+              ) : (
+                <Text style={styles.heroBig}>Your recurring spend will appear here when confirmed subscription rates are added.</Text>
+              )}
+              <Text style={{color:colors.onSurfaceInverse,opacity:0.8,marginTop:12,fontSize:13}}>
+                {data?.active_count ?? 0} active plans · {renews} renewals soon · {trials} trials ending
               </Text>
-              {vault.data?.monthly_by_currency ? (
-                <Text style={{ color: colors.onSurfaceInverse, opacity: 0.7, marginTop: 10, fontSize: 13 }}>
-                  {Object.entries(vault.data.monthly_by_currency).map(([currency, value]) => money(value as number, currency)).join(" · ")} / month
-                </Text>
-              ) : null}
               <View style={styles.heroChips}>
                 <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Yearly</Text><Text style={styles.heroChipValue}>{money(data?.yearly_spend, cur)}</Text></View>
                 <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Renews 30d</Text><Text style={styles.heroChipValue}>{renews}</Text></View>
@@ -112,6 +111,18 @@ export default function Home() {
                 <Text style={{ color: colors.muted, fontSize: 10, fontWeight: "800", letterSpacing: 1 }}>{item.label}</Text>
               </Card>)}
             </View>
+
+            <Card style={{ marginHorizontal: 18, marginTop: 12, backgroundColor: colors.surfaceSecondary }}
+                  onPress={() => router.push("/import-data")}>
+              <View style={{flexDirection:"row",alignItems:"center",gap:12}}>
+                <Icon name="file-import-outline" color={colors.brandSecondary} size={23}/>
+                <View style={{flex:1}}>
+                  <Text style={{color:colors.onSurface,fontWeight:"800",fontSize:15}}>Private Excel Data</Text>
+                  <Text style={{color:colors.muted,fontSize:12}}>Import accounts and plans from your phone</Text>
+                </View>
+                <Icon name="chevron-right" color={colors.muted}/>
+              </View>
+            </Card>
 
             {/* Optional intelligence vault, kept separate from primary finance tabs */}
             <Card style={{ marginHorizontal:18,marginTop:16,backgroundColor:colors.surfaceSecondary,borderColor:colors.brandPrimary+"35" }}
@@ -148,7 +159,7 @@ export default function Home() {
             </ScrollView>
 
             {/* Upcoming renewals */}
-            <Section title="Upcoming renewals" onSeeAll={() => router.push("/(tabs)/subscriptions")}>
+            <Section title="Upcoming renewals" onSeeAll={() => router.push("/(tabs)/renewals")}>
               {data?.renewals_30d?.length ? (
                 data.renewals_30d.slice(0, 4).map((r: any, i: number) => (
                   <Pressable key={r.id} testID={`renew-${r.id}`} onPress={() => router.push(`/subscription/${r.id}`)} style={[styles.bubble, { backgroundColor: accentFor(colors, r.provider || i) }]}>
@@ -166,7 +177,7 @@ export default function Home() {
             </Section>
 
             {/* Recent links */}
-            <Section title="Recent saved links" onSeeAll={() => router.push("/link-vault")}>
+            <Section title="Recent saved links" onSeeAll={() => router.push("/vault-ai")}>
               {links.data?.length ? (
                 links.data.slice(0, 3).map((l: any, i: number) => (
                   <Card key={l.id} style={styles.linkRow} onPress={() => router.push(`/link/${l.id}`)}>
