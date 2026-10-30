@@ -9,7 +9,7 @@ import { makeStyles, useTheme } from "@/src/theme";
 import { TAB_BAR_SPACE } from "./_layout";
 
 function monthlyAmount(sub: any): number | null {
- if (sub.status !== "Active" && !(sub.status === "Trial" && sub.trial_paid === true)) return null;
+ if (sub.review_required===true || (sub.status !== "Active" && !(sub.status === "Trial" && sub.trial_paid === true))) return null;
  if (sub.auto_renew === false || sub.billing_cycle === "one-time" || sub.billing_cycle === "prepaid") return null;
  const amount = typeof sub.price==="number" ? sub.price : typeof sub.price==="string" && sub.price.trim() ? Number(sub.price) : NaN;
  if (!Number.isFinite(amount) || amount < 0) return null;
