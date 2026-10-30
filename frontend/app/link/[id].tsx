@@ -1,13 +1,14 @@
 import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { ScrollView, Text, View } from "react-native";
+import { Alert, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api, useInvalidateAll, useLink } from "@/src/lib/api";
+import { api, useInvalidateAll, useLink, useLinkReminder } from "@/src/lib/api";
 import { formatDate } from "@/src/lib/format";
 import { AppHeader, Badge, Card, Loading, PrimaryButton } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
+import { cancelLinkNotification } from "@/src/lib/link-reminders";
 
 export default function LinkDetail() {
   const styles = useStyles();
@@ -16,9 +17,11 @@ export default function LinkDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, isLoading } = useLink(id!);
+  const { data: reminder } = useLinkReminder(id!);
   const invalidate = useInvalidateAll();
 
-  const del = useMutation({ mutationFn: () => api.deleteLink(id!), onSuccess: () => { invalidate(); router.back(); } });
+  const del = useMutation({ mutationFn: () => api.deleteLink(id!), onSuccess: async () => { await cancelLinkNotification(id!); invalidate(); router.back(); } });
+  const removeReminder = useMutation({ mutationFn: () => api.deleteReminder(reminder.id), onSuccess: async () => { await cancelLinkNotification(id!); invalidate(); Alert.alert("Reminder removed", "This link remains saved in your vault."); } });
 
   if (isLoading || !data) return <View style={styles.container}><AppHeader title="Link" back /><Loading /></View>;
   const l = data;
@@ -48,10 +51,12 @@ export default function LinkDetail() {
         {l.note ? <Card><Text style={styles.sectionLabel}>Your note</Text><Text style={styles.body}>{l.note}</Text></Card> : null}
 
         <Text style={styles.saved}>Saved {formatDate(l.created_at)}</Text>
+        {reminder ? <Card><Text style={styles.sectionLabel}>Linked reminder</Text><Text style={styles.body}>{reminder.title}</Text><Text style={styles.saved}>{formatDate(reminder.due_date)} at {reminder.remind_time || "09:00"}</Text></Card> : null}
 
         <View style={{ gap: 10 }}>
           {l.url?.startsWith("http") ? <PrimaryButton title="Open link" icon="open-in-new" onPress={() => WebBrowser.openBrowserAsync(l.url)} testID="open-link" /> : null}
-          <PrimaryButton title="Add reminder" icon="bell-plus" variant="secondary" onPress={() => router.push("/add-reminder")} />
+          <PrimaryButton title={reminder ? "Reschedule reminder" : "Remind me about this link"} icon="bell-plus" variant="secondary" onPress={() => router.push({ pathname: "/add-reminder", params: { linkId: id!, linkTitle: l.title } })} />
+          {reminder ? <PrimaryButton title="Remove reminder" icon="bell-off" variant="secondary" loading={removeReminder.isPending} onPress={() => removeReminder.mutate()} /> : null}
           <PrimaryButton title="Delete" icon="trash-can-outline" variant="secondary" onPress={() => del.mutate()} loading={del.isPending} style={{ backgroundColor: colors.error + "18" }} testID="delete-link" />
         </View>
       </ScrollView>
