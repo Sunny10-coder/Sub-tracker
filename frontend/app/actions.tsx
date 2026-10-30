@@ -9,11 +9,15 @@ const ACTIONS = [
   { icon: "camera", label: "Scan Screenshot", tone: "brand", href: "/scan?mode=camera" },
   { icon: "image-multiple", label: "Choose Photo", tone: "mint", href: "/scan?mode=library" },
   { icon: "link-variant", label: "Paste Link", tone: "peach", href: "/paste-link" },
+  { icon: "account-plus", label: "Add Account", tone: "mint", href: "/add-account" },
   { icon: "wallet-plus", label: "Add Subscription", tone: "brand", href: "/add-subscription" },
   { icon: "eye-plus", label: "Add Plan", tone: "mint", href: "/add-plan" },
   { icon: "bell-plus", label: "Add Reminder", tone: "peach", href: "/add-reminder" },
   { icon: "note-plus", label: "Add Note", tone: "brand", href: "/add-note" },
   { icon: "robot", label: "Ask AI", tone: "mint", href: "/(tabs)/ai" },
+  { icon: "graph", label: "Brain Map", tone: "brand", href: "/graph" },
+  { icon: "tag-multiple", label: "Saved Plans", tone: "peach", href: "/watchlist" },
+  { icon: "bookmark-multiple", label: "Link Vault", tone: "mint", href: "/link-vault" },
 ] as const;
 
 export default function Actions() {
