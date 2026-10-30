@@ -61,6 +61,7 @@ export default function Settings() {
           </Card>
         </Section>
 
+        <Section title="Connection"><ToggleRowStatic icon="server-network" label="Configure backend URL" onPress={() => router.push("/server-setup")} /></Section>
         <Section title="About">
           <ToggleRowStatic icon="restart" label="Replay onboarding" onPress={resetOnboarding} />
         </Section>
