@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
+from deals_engine import search_deals, safe_fetch_page, find_codes, find_prices
 from vault_intelligence import normalized_name, normalized_email, account_identity, find_subscription_match, canonicalize_url, content_fingerprint, spend_by_currency, validate_reminder_schedule
 
 ROOT_DIR = Path(__file__).parent
@@ -1178,6 +1179,148 @@ async def ai_compare_endpoint(body: CompareBody):
     result = await ai_compare(plans)
     return {"comparison": result, "items": plans}
 
+
+
+# ---------------------------------------------------------------------------
+# Deals & Pricing Intelligence
+# Public web results are evidence candidates, never verified discounts.
+# ---------------------------------------------------------------------------
+DEALS_CACHE_SECONDS = 900
+
+
+@api.get("/deals/search")
+async def deals_search(q: str = "", mode: str = "all", refresh: bool = False):
+    term = re.sub(r"\s+", " ", q).strip()
+    if len(term) < 2 or len(term) > 90:
+        raise HTTPException(422, "Search must contain 2-90 characters")
+    if mode not in ("all", "plans", "offers"):
+        raise HTTPException(422, "Unknown search mode")
+    cache_key = f"{term.casefold()}|{mode}"
+    now = datetime.now(timezone.utc)
+    cached = await db.deals_cache.find_one({"key": cache_key, "user_id": USER_ID})
+    if cached and not refresh:
+        checked = cached.get("fetched_at")
+        try:
+            age = (now - datetime.fromisoformat(checked)).total_seconds()
+        except (ValueError, TypeError):
+            age = DEALS_CACHE_SECONDS + 1
+        if age < DEALS_CACHE_SECONDS:
+            return {"query": term, "items": cached.get("items", []),
+                    "cached": True, "checked_at": checked, "search_enabled": True}
+    key = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
+    if not key:
+        return {"query": term, "items": cached.get("items", []) if cached else [],
+                "cached": bool(cached), "checked_at": cached.get("fetched_at") if cached else None,
+                "search_enabled": False, "message": "Add BRAVE_SEARCH_API_KEY on the backend for live web results."}
+    try:
+        rows = await search_deals(key, term, mode)
+    except Exception:
+        logger.warning("Live plan search unavailable", exc_info=True)
+        if cached:
+            return {"query": term, "items": cached.get("items", []), "cached": True,
+                    "checked_at": cached.get("fetched_at"), "search_enabled": True,
+                    "message": "Showing older results because live search is unavailable."}
+        raise HTTPException(503, "Live price search temporarily unavailable")
+    stamp = now.isoformat()
+    await db.deals_cache.update_one({"key": cache_key, "user_id": USER_ID},
+                                    {"$set": {"items": rows, "fetched_at": stamp}},
+                                    upsert=True)
+    return {"query": term, "items": rows, "cached": False, "checked_at": stamp,
+            "search_enabled": True, "message": "Prices and promo codes are unverified search snippets, not checkout-confirmed offers."}
+
+
+@api.post("/deals/inspect")
+async def deals_inspect(body: Dict[str, Any]):
+    url = str(body.get("url") or "").strip()
+    if len(url) > 2000:
+        raise HTTPException(422, "URL too long")
+    try:
+        canonical, content = await safe_fetch_page(url)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    except Exception:
+        raise HTTPException(503, "Offer page unavailable")
+    return {"url": canonical, "prices": find_prices(content),
+            "codes": find_codes(content), "excerpt": content[:1000],
+            "checked_at": now_iso(), "verified": False}
+
+
+@api.get("/deals/codes")
+async def deals_codes():
+    rows = [clean(d) for d in await db.promo_codes.find(await base_query()).sort("created_at", -1).to_list(250)]
+    return rows
+
+
+@api.post("/deals/codes")
+async def deals_save_code(body: Dict[str, Any]):
+    code = re.sub(r"\s+", "", str(body.get("code") or "")).upper()
+    provider = str(body.get("provider") or "").strip()[:120]
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9_-]{3,24}", code) or not provider:
+        raise HTTPException(422, "Provider and valid promo code required")
+    source_url = str(body.get("source_url") or "").strip()
+    if source_url:
+        try:
+            source_url = canonicalize_url(source_url)
+        except (ValueError, OverflowError):
+            raise HTTPException(422, "Invalid source link")
+    identity = f"{normalized_name(provider)}|{code}|{normalized_email(body.get('account_email'))}"
+    existing = await db.promo_codes.find_one(await base_query({"identity": identity}))
+    if existing:
+        return {"duplicate": True, "item": clean(existing)}
+    item = {"id": str(uuid.uuid4()), "user_id": USER_ID, "deleted_at": None,
+            "identity": identity, "provider": provider, "code": code,
+            "account_email": normalized_email(body.get("account_email")),
+            "source_url": source_url, "source": str(body.get("source") or "manual")[:40],
+            "discount_text": str(body.get("discount_text") or "")[:120],
+            "expires_at": body.get("expires_at"),
+            "verified": False, "status": "unverified", "created_at": now_iso()}
+    await db.promo_codes.insert_one(dict(item))
+    return {"duplicate": False, "item": clean(item)}
+
+
+@api.get("/deals/price-history")
+async def deals_price_history(provider: str = ""):
+    term = provider.strip().casefold()
+    query = await base_query()
+    if term:
+        query["provider"] = {"$regex": re.escape(term), "$options": "i"}
+    items = [clean(d) for d in await db.price_snapshots.find(query).sort("checked_at", -1).to_list(200)]
+    return items
+
+
+@api.post("/deals/track-price")
+async def deals_track_price(body: Dict[str, Any]):
+    provider = str(body.get("provider") or "").strip()[:120]
+    url = str(body.get("url") or "")
+    if not provider or not url:
+        raise HTTPException(422, "Provider and plan URL required")
+    try:
+        canonical = canonicalize_url(url)
+    except (ValueError, OverflowError):
+        raise HTTPException(422, "Invalid plan URL")
+    amount = body.get("amount")
+    try:
+        amount = float(amount)
+    except (ValueError, TypeError):
+        raise HTTPException(422, "A confirmed numeric amount is required")
+    if not 0 < amount < 1_000_000:
+        raise HTTPException(422, "Invalid amount")
+    currency = str(body.get("currency") or "").upper()
+    if currency not in ("AED", "USD", "EUR", "GBP", "INR", "SAR"):
+        raise HTTPException(422, "Unsupported currency")
+    record = {"id": str(uuid.uuid4()), "user_id": USER_ID, "deleted_at": None,
+              "provider": provider, "plan": str(body.get("plan") or "")[:120],
+              "url": canonical, "amount": amount, "currency": currency,
+              "billing_cycle": str(body.get("billing_cycle") or "unknown"),
+              "checked_at": now_iso(), "source": str(body.get("source") or "manual"),
+              "verification": "user-confirmed"}
+    previous = await db.price_snapshots.find_one(await base_query({"url": canonical, "currency": currency}),
+                                                   sort=[("checked_at", -1)])
+    if previous and previous.get("amount") == amount and previous.get("billing_cycle") == record["billing_cycle"]:
+        return {"duplicate": True, "record": clean(previous), "change": 0}
+    await db.price_snapshots.insert_one(dict(record))
+    return {"duplicate": False, "record": clean(record),
+            "change": round(amount - previous["amount"], 2) if previous else None}
 
 # ---------------------------------------------------------------------------
 # Settings
