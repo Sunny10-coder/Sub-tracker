@@ -1,25 +1,24 @@
 import { useRouter } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const ACTIONS = [
+  { icon: "wallet-plus", label: "Subscription", tone: "brand", href: "/add-subscription" },
+  { icon: "account-plus", label: "Account", tone: "mint", href: "/add-account" },
+  { icon: "brain", label: "Vault & AI", tone: "peach", href: "/vault-ai" },
   { icon: "sale", label: "Find Deals", tone: "brand", href: "/deals" },
   { icon: "email-search", label: "Mail Codes", tone: "mint", href: "/mail-codes" },
   { icon: "ticket-percent", label: "Promo Vault", tone: "peach", href: "/promo-vault" },
   { icon: "camera", label: "Scan Screenshot", tone: "brand", href: "/scan?mode=camera" },
   { icon: "image-multiple", label: "Choose Photo", tone: "mint", href: "/scan?mode=library" },
   { icon: "link-variant", label: "Save Link", tone: "peach", href: "/paste-link" },
-  { icon: "account-plus", label: "Add Account", tone: "mint", href: "/add-account" },
-  { icon: "wallet-plus", label: "Add Subscription", tone: "brand", href: "/add-subscription" },
   { icon: "eye-plus", label: "Add Plan", tone: "mint", href: "/add-plan" },
   { icon: "bell-plus", label: "Add Reminder", tone: "peach", href: "/add-reminder" },
   { icon: "note-plus", label: "Add Note", tone: "brand", href: "/add-note" },
   { icon: "robot", label: "Ask AI", tone: "mint", href: "/(tabs)/ai" },
-  { icon: "graph", label: "Brain Map", tone: "brand", href: "/graph" },
-  { icon: "tag-multiple", label: "Saved Plans", tone: "peach", href: "/watchlist" },
   { icon: "bookmark-multiple", label: "Link Vault", tone: "mint", href: "/link-vault" },
 ] as const;
 
@@ -40,10 +39,10 @@ export default function Actions() {
   return (
     <View style={styles.overlay}>
       <Pressable style={styles.backdrop} testID="actions-backdrop" onPress={() => router.back()} />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 12, maxHeight: "88%" }]}>
         <View style={styles.handle} />
         <Text style={styles.title}>Add to SubMind</Text>
-        <View style={styles.grid}>
+        <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
           {ACTIONS.map((a) => (
             <Pressable key={a.label} testID={`action-${a.label}`} style={styles.tile} onPress={() => go(a.href)}>
               <View style={[styles.tileIcon, { backgroundColor: toneColor(a.tone) + "22" }]}>
@@ -52,7 +51,7 @@ export default function Actions() {
               <Text style={styles.tileLabel}>{a.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       </View>
     </View>
   );
