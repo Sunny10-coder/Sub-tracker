@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
+import { Alert } from "react-native";
 import { ActivityIndicator, Linking, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -59,6 +60,9 @@ export default function Scan() {
   };
 
   const ex = result?.extraction || {};
+  const saveExtracted = async()=>{try{if(!ex.provider)throw Error("Provider is missing. Add manually instead.");
+    await api.createSubscription({provider:ex.provider,product:ex.product||ex.provider,plan:ex.plan||"",price:ex.price??null,currency:ex.currency||"AED",billing_cycle:ex.billing_cycle||"unknown",renewal_date:ex.renewal_date||null,trial_end:ex.trial_end||null,account_email:ex.account_email||"",category:ex.category||"Other",status:ex.trial_end?"Trial":"Unknown",review_required:true});invalidate();Alert.alert("Saved for review","Please confirm the status and billing details before counting this as active.");router.replace("/(tabs)/subscriptions");
+  }catch(e:any){Alert.alert("Cannot save",e.message)}};
 
   return (
     <View style={styles.container}>
@@ -112,7 +116,7 @@ export default function Scan() {
               {result.status === "auto_added" ? "✓ Auto-added to your library" : "Review extracted details before saving manually"}
             </Text>
             <View style={{ gap: 10, marginTop: 14 }}>
-              <PrimaryButton title="Add subscription manually" icon="wallet-plus" onPress={() => router.replace("/add-subscription")} testID="scan-inbox" />
+              <PrimaryButton title="Save extracted details for review" icon="wallet-plus" onPress={saveExtracted} testID="scan-inbox" />
               <PrimaryButton title="Scan another" icon="camera" variant="secondary" onPress={() => { setPreview(null); setResult(null); run(); }} />
             </View>
           </Card>
