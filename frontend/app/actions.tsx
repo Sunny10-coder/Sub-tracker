@@ -6,6 +6,9 @@ import { Icon } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const ACTIONS = [
+  { icon: "sale", label: "Find Deals", tone: "brand", href: "/deals" },
+  { icon: "email-search", label: "Mail Codes", tone: "mint", href: "/mail-codes" },
+  { icon: "ticket-percent", label: "Promo Vault", tone: "peach", href: "/promo-vault" },
   { icon: "camera", label: "Scan Screenshot", tone: "brand", href: "/scan?mode=camera" },
   { icon: "image-multiple", label: "Choose Photo", tone: "mint", href: "/scan?mode=library" },
   { icon: "link-variant", label: "Save Link", tone: "peach", href: "/paste-link" },
