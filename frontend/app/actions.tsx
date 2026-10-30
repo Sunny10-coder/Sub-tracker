@@ -8,7 +8,7 @@ import { makeStyles, useTheme } from "@/src/theme";
 const ACTIONS = [
   { icon: "camera", label: "Scan Screenshot", tone: "brand", href: "/scan?mode=camera" },
   { icon: "image-multiple", label: "Choose Photo", tone: "mint", href: "/scan?mode=library" },
-  { icon: "link-variant", label: "Paste Link", tone: "peach", href: "/paste-link" },
+  { icon: "link-variant", label: "Save Link", tone: "peach", href: "/paste-link" },
   { icon: "account-plus", label: "Add Account", tone: "mint", href: "/add-account" },
   { icon: "wallet-plus", label: "Add Subscription", tone: "brand", href: "/add-subscription" },
   { icon: "eye-plus", label: "Add Plan", tone: "mint", href: "/add-plan" },
