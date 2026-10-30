@@ -4,7 +4,7 @@ import { FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useLinks } from "@/src/lib/api";
-import { AppHeader, ChipRow, EmptyState, Icon, Loading } from "@/src/components/ui";
+import { AppHeader, ChipRow, EmptyState, Icon, Loading, PrimaryButton } from "@/src/components/ui";
 import { accentFor, makeStyles, useTheme } from "@/src/theme";
 
 const SOURCES = ["All", "Instagram", "Website", "YouTube", "Reddit", "Chrome", "Other"];
@@ -24,7 +24,7 @@ export default function LinkVault() {
 
   return (
     <View style={styles.container}>
-      <AppHeader title="Link Vault" subtitle={`${data?.length || 0} saved`} />
+      <AppHeader title="Link Vault" subtitle={`${data?.length || 0} saved`} right={<PrimaryButton title="Save link" icon="plus" onPress={() => router.push("/paste-link")} />} />
       <View style={styles.searchWrap}>
         <Icon name="magnify" size={20} color={colors.muted} />
         <TextInput style={styles.search} placeholder="Search your saved links…" placeholderTextColor={colors.muted} value={q} onChangeText={setQ} testID="vault-search" />
