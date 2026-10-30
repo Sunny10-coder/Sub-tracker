@@ -18,7 +18,6 @@ export default function PromoVault() {
       <Card style={{gap:8}}>
         <Text style={styles.title}>{data?.length || 0} saved promo codes</Text>
         <Text style={styles.muted}>Codes are not automatically verified or applied to checkout. Check eligibility, expiry and renewal pricing.</Text>
-        <PrimaryButton title="Find codes in pasted emails" icon="email-search" variant="secondary" onPress={()=>router.push("/mail-codes")}/>
         <PrimaryButton title="Find promo codes online" icon="magnify" onPress={()=>router.push("/deals")}/>
         <PrimaryButton title="Inspect pasted offer link" icon="link-variant" variant="secondary" onPress={()=>router.push("/inspect-offer")}/>
       </Card>
