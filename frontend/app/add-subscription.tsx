@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { View } from "react-native";
+import { Alert, View } from "react-native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -17,7 +17,7 @@ export default function AddSubscription() {
   const insets = useSafeAreaInsets();
   const invalidate = useInvalidateAll();
   const [f, setF] = useState<any>({
-    provider: "", product: "", plan: "", category: "Other", status: "Active",
+    provider: "", product: "", plan: "", account_email: "", category: "Other", status: "Active",
     price: "", currency: "AED", billing_cycle: "monthly", renewal_date: "", trial_end: "", notes: "",
   });
   const set = (k: string) => (v: any) => setF((s: any) => ({ ...s, [k]: v }));
@@ -28,6 +28,7 @@ export default function AddSubscription() {
       renewal_date: f.renewal_date || null, trial_end: f.trial_end || null, create_reminder: true,
     }),
     onSuccess: () => { invalidate(); router.back(); },
+    onError: (e: Error) => Alert.alert("Cannot create subscription", e.message.includes("409") ? "A matching account and plan already exist. Open the existing subscription instead." : e.message),
   });
 
   return (
@@ -35,6 +36,7 @@ export default function AddSubscription() {
       <AppHeader title="Add subscription" back />
       <FormScroll>
         <TextField label="Provider" value={f.provider} onChangeText={set("provider")} placeholder="Netflix, Spotify…" testID="f-provider" />
+        <TextField label="Account email" value={f.account_email} onChangeText={set("account_email")} placeholder="Email used for this subscription" keyboardType="email-address" testID="f-account-email" />
         <TextField label="Product / service" value={f.product} onChangeText={set("product")} placeholder="Premium" testID="f-product" />
         <TextField label="Plan name" value={f.plan} onChangeText={set("plan")} placeholder="Individual" testID="f-plan" />
         <SelectField label="Category" options={CATEGORIES} value={f.category} onChange={set("category")} testID="f-category" />
