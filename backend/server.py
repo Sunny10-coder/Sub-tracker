@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
+from vault_intelligence import normalized_name, normalized_email, account_identity, find_subscription_match, canonicalize_url, content_fingerprint, spend_by_currency
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -43,6 +44,7 @@ EXTRACTION_SCHEMA_HINT = """Return ONLY a strict JSON object (no markdown, no pr
 {
   "content_type": one of ["subscription","trial","plan","link","reminder","payment","note","unknown"],
   "provider": string,
+  "account_email": string (only if explicitly visible, otherwise empty),
   "product": string,
   "plan": string,
   "price": number or null,
@@ -133,6 +135,7 @@ def _normalize_extraction(d: Dict[str, Any], source_type: str) -> Dict[str, Any]
     out = {
         "content_type": s(d.get("content_type") or "unknown").lower(),
         "provider": s(d.get("provider")),
+        "account_email": normalized_email(d.get("account_email")),
         "product": s(d.get("product")),
         "plan": s(d.get("plan")),
         "price": d.get("price") if isinstance(d.get("price"), (int, float)) else None,
@@ -225,18 +228,13 @@ async def get_settings() -> dict:
 # Ingest pipeline
 # ---------------------------------------------------------------------------
 async def _find_duplicate(extraction: dict) -> Optional[dict]:
-    prov = extraction.get("provider", "").strip().lower()
-    prod = extraction.get("product", "").strip().lower()
-    if not prov and not prod:
-        return None
-    subs = await db.subscriptions.find(await base_query()).to_list(500)
-    for sub in subs:
-        sp = (sub.get("provider") or "").strip().lower()
-        spr = (sub.get("product") or "").strip().lower()
-        if prov and sp and prov == sp:
-            return clean(sub)
-        if prod and spr and prod == spr:
-            return clean(sub)
+    """Only automatically dedupe known identities; ambiguous items need review."""
+    subs = await db.subscriptions.find(await base_query()).to_list(1000)
+    match, kind = find_subscription_match(extraction, subs)
+    if match:
+        result = clean(match)
+        result["_match_kind"] = kind
+        return result
     return None
 
 
@@ -311,6 +309,8 @@ async def _create_subscription_from(ex: dict, source: str, url: str, image: Opti
         "provider": ex.get("provider") or ex.get("product") or "Unknown",
         "product": ex.get("product") or ex.get("provider") or "Unknown",
         "plan": ex.get("plan", ""), "category": ex.get("category", "Other"),
+        "account_email": normalized_email(ex.get("account_email")),
+        "account_id": ex.get("account_id"),
         "status": status, "price": ex.get("price"), "currency": ex.get("currency", "AED"),
         "billing_cycle": ex.get("billing_cycle") or "monthly",
         "renewal_date": ex.get("renewal_date"), "start_date": ex.get("renewal_date"),
@@ -554,6 +554,84 @@ async def inbox_action(item_id: str, body: InboxAction):
     return {"ok": True, "status": "added", "ref": ref, "type": rtype}
 
 
+
+# ---------------------------------------------------------------------------
+# Smart Vault: reusable accounts, emails, duplicates and dashboard
+# ---------------------------------------------------------------------------
+
+@api.get("/accounts")
+async def list_accounts():
+    accounts = [clean(a) for a in await db.accounts.find(await base_query()).sort("created_at", -1).to_list(1000)]
+    subscriptions = await db.subscriptions.find(await base_query()).to_list(1000)
+    for a in accounts:
+        linked = [s for s in subscriptions if s.get("account_id") == a["id"] or
+                  (normalized_name(s.get("provider")) == normalized_name(a.get("provider"))
+                   and normalized_email(s.get("account_email")) == a.get("email") and a.get("email"))]
+        a["active_plans"] = sum(s.get("status") in ("Active", "Trial") for s in linked)
+        a["plans"] = [{"id": s["id"], "plan": s.get("plan"), "status": s.get("status")} for s in linked]
+    return accounts
+
+
+@api.post("/accounts")
+async def create_account(body: Dict[str, Any]):
+    provider = str(body.get("provider") or "").strip()
+    email = normalized_email(body.get("email"))
+    if not provider or not email:
+        raise HTTPException(422, "Provider and valid account email required")
+    key = account_identity(provider, email)
+    found = await db.accounts.find_one({"user_id": USER_ID, "identity_key": key, "deleted_at": None})
+    if found:
+        raise HTTPException(409, detail={"message": "Account already exists", "existing_id": found["id"]})
+    doc = {"id": str(uuid.uuid4()), "user_id": USER_ID, "deleted_at": None,
+           "provider": provider, "email": email, "identity_key": key,
+           "display_name": str(body.get("display_name") or ""), "login_url": str(body.get("login_url") or ""),
+           "notes": str(body.get("notes") or ""), "tags": body.get("tags") or [],
+           "status": "Active", "created_at": now_iso(), "updated_at": now_iso()}
+    await db.accounts.insert_one(dict(doc))
+    return clean(doc)
+
+
+@api.patch("/accounts/{aid}")
+async def update_account(aid: str, body: Dict[str, Any]):
+    original = await db.accounts.find_one({"id": aid, "user_id": USER_ID, "deleted_at": None})
+    if not original:
+        raise HTTPException(404, "Account not found")
+    allowed = {"display_name", "login_url", "notes", "tags", "status"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    updates["updated_at"] = now_iso()
+    await db.accounts.update_one({"id": aid, "user_id": USER_ID}, {"$set": updates})
+    return clean(await db.accounts.find_one({"id": aid, "user_id": USER_ID}))
+
+
+@api.delete("/accounts/{aid}")
+async def delete_account(aid: str):
+    await db.accounts.update_one({"id": aid, "user_id": USER_ID},
+                                 {"$set": {"deleted_at": now_iso()}})
+    return {"ok": True}
+
+
+@api.post("/subscriptions/check-duplicate")
+async def check_subscription_duplicate(body: Dict[str, Any]):
+    candidates = await db.subscriptions.find(await base_query()).to_list(1000)
+    found, kind = find_subscription_match(body, candidates)
+    return {"match": kind, "existing": {"id": found["id"], "provider": found.get("provider"),
+            "plan": found.get("plan"), "account_email": found.get("account_email")} if found else None}
+
+
+@api.get("/vault/dashboard")
+async def vault_dashboard():
+    ins = await insights()
+    accounts = await db.accounts.count_documents(await base_query())
+    links = await db.saved_links.count_documents(await base_query())
+    plans = await db.plan_watchlist.count_documents(await base_query())
+    pending = await db.smart_inbox.count_documents(await base_query({"status": {"$in": ["needs_review", "needs_confirmation", "duplicate"]}}))
+    subs = await db.subscriptions.find(await base_query()).to_list(1000)
+    return {"monthly_by_currency": ins.get("monthly_by_currency", {}),
+            "active_subscriptions": sum(s.get("status") in ("Active", "Trial") for s in subs),
+            "accounts": accounts, "links": links, "saved_plans": plans, "needs_review": pending,
+            "renewals_30d": ins.get("renewals_30d", []),
+            "trials_ending": ins.get("trials_ending", [])}
+
 # ---------------------------------------------------------------------------
 # Subscriptions CRUD
 # ---------------------------------------------------------------------------
@@ -583,6 +661,8 @@ async def create_subscription(body: Dict[str, Any]):
         "id": sid, "user_id": USER_ID, "deleted_at": None,
         "provider": body.get("provider", "Unknown"), "product": body.get("product") or body.get("provider", "Unknown"),
         "plan": body.get("plan", ""), "category": body.get("category", "Other"),
+        "account_email": normalized_email(body.get("account_email")),
+        "account_id": body.get("account_id"),
         "status": body.get("status", "Active"), "price": body.get("price"),
         "currency": body.get("currency", "AED"), "billing_cycle": body.get("billing_cycle", "monthly"),
         "renewal_date": body.get("renewal_date"), "start_date": body.get("start_date"),
@@ -592,6 +672,9 @@ async def create_subscription(body: Dict[str, Any]):
         "source_image": None, "related_links": [], "tags": body.get("tags", []),
         "payments": [], "price_history": [], "created_at": now_iso(), "updated_at": now_iso(),
     }
+    existing, kind = find_subscription_match(doc, await db.subscriptions.find(await base_query()).to_list(1000))
+    if existing and kind == "exact":
+        raise HTTPException(409, detail={"message": "This account and plan already exist", "existing_id": existing["id"]})
     await db.subscriptions.insert_one(dict(doc))
     if body.get("create_reminder") and (doc["renewal_date"] or doc["trial_end"]):
         rem = _reminder_from(doc, "subscription", sid)
@@ -606,6 +689,8 @@ async def update_subscription(sid: str, body: Dict[str, Any]):
     if not doc:
         raise HTTPException(404, "Not found")
     body.pop("id", None); body.pop("_id", None); body.pop("user_id", None)
+    if "account_email" in body:
+        body["account_email"] = normalized_email(body["account_email"])
     if "price" in body and body["price"] != doc.get("price"):
         hist = doc.get("price_history", [])
         hist.append({"price": doc.get("price"), "date": now_iso()})
@@ -791,7 +876,8 @@ async def insights():
     subs = await db.subscriptions.find(await base_query()).to_list(500)
     subs = [clean(s) for s in subs]
     active = [s for s in subs if s.get("status") in ("Active", "Trial")]
-    monthly = round(sum(_monthly_cost(s) for s in active), 2)
+    by_currency = spend_by_currency(active)
+    monthly = round(by_currency.get(settings["currency"], 0), 2)
     yearly = round(monthly * 12, 2)
 
     today = datetime.now(timezone.utc).date()
@@ -836,7 +922,7 @@ async def insights():
 
     watch = await db.plan_watchlist.find(await base_query()).to_list(200)
     return {
-        "currency": settings["currency"],
+        "currency": settings["currency"], "monthly_by_currency": by_currency,
         "monthly_spend": monthly, "yearly_spend": yearly,
         "active_count": len(active), "total_count": len(subs),
         "renewals_30d": renewals, "trials_ending": trials,
