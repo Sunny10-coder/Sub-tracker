@@ -31,8 +31,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Check Android SDK available on runner
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -d "$ANDROID_HOME/platforms" || test -d "$ANDROID_SDK_ROOT/platforms"
       - name: Enable Yarn classic
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
