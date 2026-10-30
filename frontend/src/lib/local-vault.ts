@@ -102,7 +102,7 @@ function dueDate(s:Dict):string|null{
  return s.status==="Trial"?(s.trial_end||s.renewal_date||null):(s.renewal_date||null);
 }
 function charge(s:Dict):number|null{
- if(!["Active","Trial"].includes(s.status)||s.auto_renew===false)return null;
+ if(!["Active","Trial"].includes(s.status)||s.auto_renew===false||s.review_required===true)return null;
  if(s.status==="Trial"&&s.trial_paid!==true)return null;
  if(s.price===null||s.price===undefined||!Number.isFinite(Number(s.price)))return null;
  const cost=Number(s.price);if(cost<0)return null;
