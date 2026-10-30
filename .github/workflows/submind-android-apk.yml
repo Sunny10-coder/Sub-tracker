@@ -1,0 +1,62 @@
+name: Build SubMind Android APK
+
+on:
+  push:
+    branches:
+      - feature/submind-smart-vault-20261030
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/submind-android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout SubMind
+        uses: actions/checkout@v4
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Enable Yarn classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive --no-lockfile
+      - name: Generate Android project
+        env:
+          EXPO_PUBLIC_BACKEND_URL: ''
+          EXPO_NO_TELEMETRY: '1'
+          CI: '1'
+        run: npx expo prebuild --platform android --no-install --non-interactive
+      - name: Build installable Android APK
+        env:
+          EXPO_PUBLIC_BACKEND_URL: ''
+          EXPO_NO_TELEMETRY: '1'
+          CI: '1'
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+      - name: Upload SubMind APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubMind-Android-APK
+          path: frontend/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 7
