@@ -1,10 +1,19 @@
 // SubMind API client + React Query hooks. All calls go through EXPO_PUBLIC_BACKEND_URL/api.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { storage } from "@/src/utils/storage";
 
-const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
+const DEFAULT_BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim().replace(/\/+$/, "");
+export const BACKEND_URL_STORAGE_KEY = "submind.backend_url";
+
+export async function getBackendUrl(): Promise<string> {
+  const configured = await storage.getItem(BACKEND_URL_STORAGE_KEY, "");
+  return (typeof configured === "string" && configured.trim() ? configured.trim() : DEFAULT_BACKEND_URL).replace(/\/+$/, "");
+}
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const baseUrl = await getBackendUrl();
+  if (!baseUrl) throw new Error("Backend not configured. Open Server Setup on the home screen.");
+  const res = await fetch(`${baseUrl}/api${path}`, {
     headers: { "Content-Type": "application/json" },
     ...opts,
   });
@@ -16,6 +25,7 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  health: () => req<any>("/"),
   insights: () => req<any>("/insights"),
   dealsSearch: (q: string, mode = "all", refresh = false) => req<any>(`/deals/search?q=${encodeURIComponent(q)}&mode=${mode}&refresh=${refresh}`),
   inspectDeal: (url: string) => req<any>("/deals/inspect", { method: "POST", body: JSON.stringify({ url }) }),
@@ -78,7 +88,9 @@ export const api = {
   transcribe: async (uri: string): Promise<{ text: string }> => {
     const form = new FormData();
     form.append("file", { uri, name: "voice.m4a", type: "audio/mp4" } as any);
-    const res = await fetch(`${BASE}/stt/transcribe`, { method: "POST", body: form as any });
+    const baseUrl = await getBackendUrl();
+    if (!baseUrl) throw new Error("Backend not configured. Open Server Setup.");
+    const res = await fetch(`${baseUrl}/api/stt/transcribe`, { method: "POST", body: form as any });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
