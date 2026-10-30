@@ -1,3 +1,4 @@
+import { METRO } from "@/src/components/metro-tiles";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { FlatList, RefreshControl, Text, View } from "react-native";
@@ -47,8 +48,8 @@ export default function Subscriptions() {
             />
           }
           renderItem={({ item }) => (
-            <Card style={styles.row} onPress={() => router.push(`/subscription/${item.id}`)} testID={`sub-${item.id}`}>
-              <CategoryDot category={item.category} size={46} />
+            <Card style={[styles.row,{backgroundColor:"#191919",borderRadius:1,borderWidth:0}]} onPress={() => router.push(`/subscription/${item.id}`)} testID={`sub-${item.id}`}>
+              <View style={{width:6,alignSelf:"stretch",backgroundColor:item.status==="Active"?METRO.cyan:item.status==="Trial"?METRO.orange:item.status==="Cancelled"?METRO.purple:METRO.cobalt}}/>
               <View style={{ flex: 1 }}>
                 <View style={styles.rowTop}>
                   <Text style={styles.title} numberOfLines={1}>{item.provider}</Text>
@@ -69,10 +70,10 @@ export default function Subscriptions() {
 }
 
 const useStyles = makeStyles((colors) => ({
-  container: { flex: 1, backgroundColor: colors.surface },
+  container: { flex: 1, backgroundColor: METRO.black },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   rowTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  title: { color: colors.onSurfaceSecondary, fontSize: 16, fontWeight: "800", flex: 1 },
-  sub: { color: colors.muted, fontSize: 13, marginTop: 3 },
+  title: { color: METRO.white, fontSize: 16, fontWeight: "800", flex: 1 },
+  sub: { color: "#BBBBBB", fontSize: 13, marginTop: 3 },
   amount: { color: colors.onSurface, fontSize: 16, fontWeight: "800" },
 }));
