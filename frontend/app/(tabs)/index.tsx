@@ -15,9 +15,9 @@ function greeting() {
 
 const QUICK = [
   { icon: "camera", label: "Scan", href: "/scan?mode=camera", key: "accentRed" },
-  { icon: "link-variant", label: "Paste", href: "/paste-link", key: "accentBlue" },
+  { icon: "link-variant", label: "Save Link", href: "/paste-link", key: "accentBlue" },
   { icon: "chat-processing", label: "Ask AI", href: "/(tabs)/ai", key: "accentPurple" },
-  { icon: "wallet-plus", label: "Add", href: "/add-subscription", key: "accentGreen" },
+  { icon: "bell-plus", label: "Remind", href: "/add-reminder", key: "accentGreen" },
 ];
 
 const SHORTCUTS = [
