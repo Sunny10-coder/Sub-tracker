@@ -92,7 +92,7 @@ export default function Home() {
                 {data?.active_count ?? 0} active plans · {renews} renewals soon · {trials} trials ending
               </Text>
               <View style={styles.heroChips}>
-                <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Yearly</Text><Text style={styles.heroChipValue}>{money(data?.yearly_spend, cur)}</Text></View>
+                <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Currencies tracked</Text><Text style={styles.heroChipValue}>{Object.keys(vault.data?.monthly_by_currency || {}).length}</Text></View>
                 <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Renews 30d</Text><Text style={styles.heroChipValue}>{renews}</Text></View>
               </View>
             </View>
