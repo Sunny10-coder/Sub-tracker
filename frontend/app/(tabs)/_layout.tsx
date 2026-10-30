@@ -12,7 +12,7 @@ const PRIMARY = [
   { name: "subscriptions", label: "Plans", icon: "wallet-outline", active: "wallet" },
   { name: "account-hub", label: "Accounts", icon: "account-multiple-outline", active: "account-multiple" },
   { name: "renewals", label: "Renewals", icon: "calendar-clock-outline", active: "calendar-clock" },
-  { name: "spending", label: "Spending", icon: "chart-donut", active: "chart-donut-variant" },
+  { name: "vault", label: "Vault & AI", icon: "view-dashboard-outline", active: "view-dashboard" },
 ] as const;
 
 function PrimaryTabBar({ state, navigation }: any) {
@@ -34,7 +34,7 @@ function PrimaryTabBar({ state, navigation }: any) {
           }}>
           <View style={[styles.iconWrap, active && styles.iconActive]}>
             <Icon name={active ? item.active : item.icon} size={23}
-                  color={active ? colors.brandPrimary : colors.muted}/>
+                  color={active ? "#00A9E8" : "#B4B4B4"}/>
           </View>
           <Text numberOfLines={1} style={[styles.label, active && styles.labelActive]}>{item.label}</Text>
         </Pressable>;
@@ -48,19 +48,20 @@ export default function TabsLayout() {
    <Tabs.Screen name="subscriptions" />
    <Tabs.Screen name="account-hub" />
    <Tabs.Screen name="renewals" />
-   <Tabs.Screen name="spending" />
+   <Tabs.Screen name="vault" />
+   <Tabs.Screen name="spending" options={{ href: null }} />
    <Tabs.Screen name="inbox" options={{ href: null }} />
    <Tabs.Screen name="ai" options={{ href: null }} />
  </Tabs>;
 }
 const useStyles = makeStyles(c => ({
   wrap: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 12 },
-  pill: { flexDirection: "row", backgroundColor: c.surfaceSecondary, borderWidth: 1,
-          borderColor: c.border, borderRadius: 23, paddingHorizontal: 5, paddingVertical: 7,
+  pill: { flexDirection: "row", backgroundColor: "#111111", borderWidth: 1,
+          borderColor: "#252525", borderRadius: 23, paddingHorizontal: 5, paddingVertical: 7,
           shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 22, shadowOffset: { width:0, height:6 }, elevation:12 },
   tab: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 57, gap: 1 },
   iconWrap: { height: 34, width: 43, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  iconActive: { backgroundColor: c.brandPrimary + "20" },
-  label: { color: c.muted, fontSize: 10, fontWeight: "600", letterSpacing: -0.1 },
-  labelActive: { color: c.brandPrimary, fontWeight:"800" },
+  iconActive: { backgroundColor: "#003B58" },
+  label: { color: "#B4B4B4", fontSize: 10, fontWeight: "600", letterSpacing: -0.1 },
+  labelActive: { color: "#00A9E8", fontWeight:"800" },
 }));
