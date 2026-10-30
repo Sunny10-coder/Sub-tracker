@@ -1,6 +1,7 @@
 // SubMind API client + React Query hooks. All calls go through EXPO_PUBLIC_BACKEND_URL/api.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { storage } from "@/src/utils/storage";
+import { localRequest } from "@/src/lib/local-vault";
 
 const DEFAULT_BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim().replace(/\/+$/, "");
 export const BACKEND_URL_STORAGE_KEY = "submind.backend_url";
@@ -12,7 +13,7 @@ export async function getBackendUrl(): Promise<string> {
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const baseUrl = await getBackendUrl();
-  if (!baseUrl) throw new Error("Backend not configured. Open Server Setup on the home screen.");
+  if (!baseUrl) return localRequest<T>(path, opts);
   const res = await fetch(`${baseUrl}/api${path}`, {
     headers: { "Content-Type": "application/json" },
     ...opts,
