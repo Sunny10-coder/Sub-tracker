@@ -3,7 +3,7 @@
 // non-style color props (icon color, placeholders). Never write hex in components.
 
 import { useMemo } from "react";
-import { Appearance, StyleSheet, useColorScheme } from "react-native";
+import { Appearance, StyleSheet } from "react-native";
 
 export type ColorScheme = "light" | "dark";
 
@@ -54,23 +54,23 @@ const light = {
 export type ThemeColors = typeof light;
 
 const dark: ThemeColors = {
-  surface: "#0C0B10",
+  surface: "#131317",
   onSurface: "#FFFFFF",
-  surfaceSecondary: "#17161F",
+  surfaceSecondary: "#1F1F23",
   onSurfaceSecondary: "#F3F4F6",
-  surfaceTertiary: "#221F2C",
+  surfaceTertiary: "#2A292E",
   onSurfaceTertiary: "#D1D5DB",
-  surfaceInverse: "#F4F1EA",
-  onSurfaceInverse: "#141319",
-  muted: "#9C978C",
+  surfaceInverse: "#26232B",
+  onSurfaceInverse: "#F9F8FB",
+  muted: "#A9A4AE",
 
-  brand: "#7B6AFE",
+  brand: "#FFB4AA",
   onBrand: "#FFFFFF",
-  brandPrimary: "#7B6AFE",
-  onBrandPrimary: "#FFFFFF",
-  brandSecondary: "#23EAA9",
+  brandPrimary: "#FFB4AA",
+  onBrandPrimary: "#410001",
+  brandSecondary: "#00DBE9",
   onBrandSecondary: "#003B2E",
-  brandTertiary: "#FFA394",
+  brandTertiary: "#DCB8FF",
   onBrandTertiary: "#4A150D",
 
   success: "#34D399",
@@ -82,9 +82,9 @@ const dark: ThemeColors = {
   info: "#3B82F6",
   onInfo: "#FFFFFF",
 
-  border: "#2A2836",
-  borderStrong: "#3F3D50",
-  divider: "#1E1C28",
+  border: "#353439",
+  borderStrong: "#50484E",
+  divider: "#29262D",
 
   accentRed: "#F4503F",
   accentYellow: "#FFCC3E",
@@ -96,7 +96,7 @@ const dark: ThemeColors = {
   onAccent: "#1F1A15",
 };
 
-export const defaultScheme = "light" satisfies ColorScheme;
+export const defaultScheme = "dark" satisfies ColorScheme;
 
 export const themes: { light: ThemeColors; dark?: ThemeColors } = { light, dark };
 
@@ -104,11 +104,10 @@ export function setColorScheme(scheme: ColorScheme | null) {
   Appearance.setColorScheme?.(scheme ?? "unspecified");
 }
 
-setColorScheme?.(themes.dark ? null : defaultScheme);
+setColorScheme("dark");
 
 export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
-  const system = useColorScheme();
-  const scheme: ColorScheme = system && themes[system] ? system : defaultScheme;
+  const scheme: ColorScheme = "dark"; // Reference screens use a consistent dark vault theme.
   return { scheme, colors: themes[scheme] ?? themes.light };
 }
 
