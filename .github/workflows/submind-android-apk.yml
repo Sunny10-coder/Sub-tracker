@@ -1,6 +1,9 @@
 name: Build SubMind Android APK
 
 on:
+  push:
+    branches:
+      - feature/submind-smart-vault-20261030
   workflow_dispatch:
 
 permissions:
