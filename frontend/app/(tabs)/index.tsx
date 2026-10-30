@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TAB_BAR_SPACE } from "./_layout";
-import { useInsights, useLinks, useSubscriptions, useWatchlist } from "@/src/lib/api";
+import { useInsights, useLinks, useSubscriptions, useWatchlist, useVaultDashboard } from "@/src/lib/api";
 import { money, relativeDate } from "@/src/lib/format";
 import { Card, Icon, Loading } from "@/src/components/ui";
 import { accentFor, makeStyles, useTheme } from "@/src/theme";
@@ -21,6 +21,7 @@ const QUICK = [
 ];
 
 const SHORTCUTS = [
+  { icon: "account-multiple", label: "Accounts", href: "/accounts" },
   { icon: "bookmark-multiple", label: "Link Vault", href: "/link-vault" },
   { icon: "eye-check", label: "Watchlist", href: "/watchlist" },
   { icon: "bell", label: "Reminders", href: "/reminders" },
@@ -34,6 +35,7 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const ins = useInsights();
+  const vault = useVaultDashboard();
   const links = useLinks();
   const watch = useWatchlist();
   const subs = useSubscriptions();
@@ -44,8 +46,8 @@ export default function Home() {
   const dateStr = today.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const weekday = today.toLocaleDateString(undefined, { weekday: "long" });
 
-  const refreshing = ins.isFetching || links.isFetching || watch.isFetching;
-  const refetchAll = () => { ins.refetch(); links.refetch(); watch.refetch(); subs.refetch(); };
+  const refreshing = ins.isFetching || links.isFetching || watch.isFetching || vault.isFetching;
+  const refetchAll = () => { ins.refetch(); links.refetch(); watch.refetch(); subs.refetch(); vault.refetch(); };
 
   const renews = data?.renewals_30d?.length ?? 0;
   const trials = data?.trials_ending?.length ?? 0;
@@ -65,6 +67,7 @@ export default function Home() {
           </View>
         </View>
         <Text style={styles.brand}>SubMind</Text>
+        <Text style={[styles.hi, { paddingHorizontal: 22, marginTop: 2 }]}>Less clutter. More control.</Text>
 
         {ins.isLoading ? (
           <Loading />
@@ -72,7 +75,7 @@ export default function Home() {
           <>
             {/* Expressive dark hero card */}
             <View style={styles.hero}>
-              <Text style={styles.heroLead}>Here is your money memory today.</Text>
+              <Text style={styles.heroLead}>YOUR DIGITAL TOOLKIT · MONTHLY COMMITMENT</Text>
               <Text style={styles.heroBig}>
                 You are spending{" "}
                 <Text style={[styles.hl, { color: colors.accentYellow }]}>{money(data?.monthly_spend, cur)}</Text>
@@ -84,10 +87,30 @@ export default function Home() {
                 <Text style={[styles.hl, { color: colors.accentPink }]}>{trials} trials</Text>
                 <Text style={styles.heroBig}> are ending.</Text>
               </Text>
+              {vault.data?.monthly_by_currency ? (
+                <Text style={{ color: colors.onSurfaceInverse, opacity: 0.7, marginTop: 10, fontSize: 13 }}>
+                  {Object.entries(vault.data.monthly_by_currency).map(([currency, value]) => money(value as number, currency)).join(" · ")} / month
+                </Text>
+              ) : null}
               <View style={styles.heroChips}>
                 <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Yearly</Text><Text style={styles.heroChipValue}>{money(data?.yearly_spend, cur)}</Text></View>
                 <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Renews 30d</Text><Text style={styles.heroChipValue}>{renews}</Text></View>
               </View>
+            </View>
+
+            {/* Live overview: separate subscriptions, accounts, saved plans and inbox work */}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 18, marginTop: 12, gap: 10 }}>
+              {[
+                { label: "ACTIVE PLANS", value: vault.data?.active_subscriptions ?? "—", icon: "wallet", route: "/(tabs)/subscriptions", color: colors.accentRed },
+                { label: "ACCOUNTS", value: vault.data?.accounts ?? "—", icon: "account-key", route: "/accounts", color: colors.accentBlue },
+                { label: "SAVED PLANS", value: vault.data?.saved_plans ?? "—", icon: "bookmark", route: "/watchlist", color: colors.accentPurple },
+                { label: "NEEDS REVIEW", value: vault.data?.needs_review ?? "—", icon: "shield-alert", route: "/(tabs)/inbox", color: colors.accentGreen },
+              ].map(item => <Card key={item.label} onPress={() => router.push(item.route as any)}
+                style={{ width: "48%", flexGrow: 1, gap: 8, borderColor: colors.border, minHeight: 112 }}>
+                <Icon name={item.icon} color={item.color} size={22}/>
+                <Text style={{ color: colors.onSurface, fontWeight: "800", fontSize: 25 }}>{item.value}</Text>
+                <Text style={{ color: colors.muted, fontSize: 10, fontWeight: "800", letterSpacing: 1 }}>{item.label}</Text>
+              </Card>)}
             </View>
 
             {/* Quick actions */}
