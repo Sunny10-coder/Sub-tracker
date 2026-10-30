@@ -41,7 +41,7 @@ export default function Deals() {
       source: "user-confirmed" }),
     onSuccess: (r: any) => { invalidate(); Alert.alert(r.duplicate ? "Already tracked" : "Price snapshot saved",
       r.change === null || r.change === undefined ? "Future prices can be compared against this amount." :
-      r.change === 0 ? "No rate change recorded." : \`Price changed by \${r.change} \${currency}.\`); },
+      r.change === 0 ? "No rate change recorded." : `Price changed by \${r.change} \${currency}.`); },
     onError: (e: Error) => Alert.alert("Could not track price", e.message),
   });
   useEffect(() => { if (params.q && params.q.length >= 2) search.mutate({ refresh: false }); }, []);
@@ -64,7 +64,7 @@ export default function Deals() {
         <View style={styles.chips}>{["Seedance", "ChatGPT", "Claude", "Replit"].map(q => <Chip key={q} label={q} active={query === q} onPress={() => { setQuery(q); setResponse(null); }}/>)}</View>
       </Card>
       <View style={styles.headerRow}>
-        <Text style={styles.section}>Search results {items.length ? \`(\${items.length})\` : ""}</Text>
+        <Text style={styles.section}>Search results {items.length ? `(\${items.length})` : ""}</Text>
         {response?.search_enabled && <Pressable onPress={() => search.mutate({ refresh: true })}><Text style={styles.linkText}>Refresh</Text></Pressable>}
       </View>
       {search.isPending ? <ActivityIndicator size="large" color={colors.brandPrimary}/> : null}
@@ -76,7 +76,7 @@ export default function Deals() {
         <Text style={styles.dim}>{item.site} · {item.verification || "unverified"}</Text>
         <Text style={styles.description}>{item.description}</Text>
         {item.prices?.map((p: any, ix: number) => <View key={ix} style={styles.priceLine}>
-          <Text style={styles.price}>{p.currency} {p.amount}{p.period !== "unknown" ? \` / \${p.period}\` : ""}</Text>
+          <Text style={styles.price}>{p.currency} {p.amount}{p.period !== "unknown" ? ` / \${p.period}` : ""}</Text>
           <Text style={styles.meta}>Mentioned, not checkout-verified</Text>
         </View>)}
         {item.codes?.map((c: any) => <View key={c.code} style={styles.codeLine}>
