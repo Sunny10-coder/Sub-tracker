@@ -63,9 +63,9 @@ export default function Settings() {
 
         <Section title="Your data"><ToggleRowStatic icon="file-import-outline" label="Import subscriptions, accounts and promos" onPress={() => router.push("/import-data")} /></Section>
 
-        <Section title="API Keys"><ToggleRowStatic icon="shield-key-outline" label="Manage Gemini, Groq, NVIDIA and Brave keys" onPress={() => router.push("/api-keys")} /></Section>
+        <Section title="AI & Search"><ToggleRowStatic icon="shield-key-outline" label="Manage and test Gemini, Groq, NVIDIA and Brave keys" onPress={() => router.push("/api-keys")} /></Section>
 
-        <Section title="Connection"><ToggleRowStatic icon="server-network" label="Configure backend URL" onPress={() => router.push("/server-setup")} /></Section>
+
         <Section title="About">
           <ToggleRowStatic icon="restart" label="Replay onboarding" onPress={resetOnboarding} />
         </Section>
