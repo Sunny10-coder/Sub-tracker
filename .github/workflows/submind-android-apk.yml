@@ -1,4 +1,4 @@
-name: Build SubMind Metro V2.1 APK
+name: Build SubMind Metro Lumia V2.1 APK
 
 on:
   push:
