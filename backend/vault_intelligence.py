@@ -127,3 +127,17 @@ def spend_by_currency(subscriptions):
         currency = str(sub.get("currency") or "AED").upper()
         totals[currency] = round(totals.get(currency, 0) + amount, 2)
     return totals
+
+
+def validate_reminder_schedule(due_date, remind_time="09:00"):
+    """Validate a calendar date and device-local HH:MM time without assuming UTC."""
+    from datetime import datetime
+    if not isinstance(due_date, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", due_date):
+        raise ValueError("Use YYYY-MM-DD for the reminder date")
+    if not isinstance(remind_time, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", remind_time):
+        raise ValueError("Use 24-hour HH:MM for the reminder time")
+    try:
+        datetime.strptime(due_date, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("Invalid reminder calendar date") from exc
+    return due_date, remind_time
