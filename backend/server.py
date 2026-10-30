@@ -516,6 +516,8 @@ async def inbox_action(item_id: str, body: InboxAction):
     item = await db.smart_inbox.find_one({"id": item_id, "user_id": USER_ID})
     if not item:
         raise HTTPException(404, "Inbox item not found")
+    if item.get("status") in ("added", "merged", "saved", "ignored", "auto_added"):
+        raise HTTPException(409, "This inbox item was already processed")
     ex = dict(item.get("extraction", {}))
     if body.edits:
         ex.update(body.edits)
@@ -525,12 +527,21 @@ async def inbox_action(item_id: str, body: InboxAction):
         return {"ok": True, "status": "ignored"}
 
     if body.action == "merge" and body.merge_into:
+        target = await db.subscriptions.find_one({"id": body.merge_into, "user_id": USER_ID, "deleted_at": None})
+        if not target:
+            raise HTTPException(404, "Merge target not found")
+        if normalized_name(ex.get("provider")) != normalized_name(target.get("provider")):
+            raise HTTPException(409, "Provider mismatch; cannot merge")
+        source_email = normalized_email(ex.get("account_email"))
+        target_email = normalized_email(target.get("account_email"))
+        if source_email and target_email and source_email != target_email:
+            raise HTTPException(409, "Different account emails; cannot merge")
         upd = {k: v for k, v in {
             "price": ex.get("price"), "renewal_date": ex.get("renewal_date"),
             "trial_end": ex.get("trial_end"), "plan": ex.get("plan"),
         }.items() if v}
         upd["updated_at"] = now_iso()
-        await db.subscriptions.update_one({"id": body.merge_into, "user_id": USER_ID}, {"$set": upd})
+        await db.subscriptions.update_one({"id": body.merge_into, "user_id": USER_ID, "deleted_at": None}, {"$set": upd})
         await db.smart_inbox.update_one({"id": item_id}, {"$set": {"status": "merged"}})
         return {"ok": True, "status": "merged", "subscription_id": body.merge_into}
 
