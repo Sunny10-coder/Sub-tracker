@@ -40,6 +40,8 @@ export const api = {
 
   links: (source?: string) => req<any[]>(`/links${source && source !== "All" ? `?source=${source}` : ""}`),
   link: (id: string) => req<any>(`/links/${id}`),
+  linkReminder: (id: string) => req<any>(`/links/${id}/reminder`),
+  putLinkReminder: (id: string, b: any) => req<any>(`/links/${id}/reminder`, {method: "PUT", body: JSON.stringify(b)}),
   updateLink: (id: string, b: any) => req<any>(`/links/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteLink: (id: string) => req<any>(`/links/${id}`, { method: "DELETE" }),
 
@@ -56,7 +58,7 @@ export const api = {
 
   ingestText: (text: string, source = "manual") => req<any>("/ingest/text", { method: "POST", body: JSON.stringify({ text, source }) }),
   ingestImage: (image_base64: string, source = "screenshot") => req<any>("/ingest/image", { method: "POST", body: JSON.stringify({ image_base64, source }) }),
-  ingestLink: (url: string, source = "share", text = "") => req<any>("/ingest/link", { method: "POST", body: JSON.stringify({ url, source, text }) }),
+  ingestLink: (url: string, source = "share", text = "", reminder?: {reminder_date?: string; reminder_time?: string; reminder_title?: string}) => req<any>("/ingest/link", { method: "POST", body: JSON.stringify({ url, source, text, ...reminder }) }),
 
   graph: () => req<any>("/graph"),
   search: (q: string) => req<any>(`/search?q=${encodeURIComponent(q)}`),
@@ -86,6 +88,7 @@ export const useSubscription = (id: string) =>
   useQuery({ queryKey: ["subscription", id], queryFn: () => api.subscription(id), enabled: !!id });
 export const useInbox = (tab: string) => useQuery({ queryKey: ["inbox", tab], queryFn: () => api.inbox(tab) });
 export const useLinks = (source?: string) => useQuery({ queryKey: ["links", source], queryFn: () => api.links(source) });
+export const useLinkReminder = (id: string) => useQuery({ queryKey: ["link-reminder", id], queryFn: () => api.linkReminder(id), enabled: !!id });
 export const useLink = (id: string) => useQuery({ queryKey: ["link", id], queryFn: () => api.link(id), enabled: !!id });
 export const useWatchlist = () => useQuery({ queryKey: ["watchlist"], queryFn: api.watchlist });
 export const usePlan = (id: string) => useQuery({ queryKey: ["plan", id], queryFn: () => api.plan(id), enabled: !!id });
@@ -96,7 +99,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["vault-dashboard", "accounts", "insights", "subscriptions", "inbox", "links", "watchlist", "reminders", "graph"].forEach((k) =>
+    ["vault-dashboard", "accounts", "insights", "subscriptions", "inbox", "links", "watchlist", "reminders", "link-reminder", "graph"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }
