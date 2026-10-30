@@ -14,23 +14,19 @@ function greeting() {
 }
 
 const QUICK = [
-  { icon: "camera", label: "Scan", href: "/scan?mode=camera", key: "accentRed" },
+  { icon: "wallet-plus", label: "Add Plan", href: "/add-subscription", key: "accentRed" },
   { icon: "link-variant", label: "Save Link", href: "/paste-link", key: "accentBlue" },
-  { icon: "magnify", label: "Find Deals", href: "/deals", key: "accentPurple" },
+  { icon: "account-plus", label: "Account", href: "/add-account", key: "accentPurple" },
   { icon: "bell-plus", label: "Remind", href: "/add-reminder", key: "accentGreen" },
 ];
 
 const SHORTCUTS = [
+  { icon: "wallet", label: "Subscriptions", href: "/(tabs)/subscriptions" },
+  { icon: "account-multiple", label: "Accounts", href: "/(tabs)/account-hub" },
+  { icon: "calendar-clock", label: "Renewals", href: "/(tabs)/renewals" },
+  { icon: "chart-donut", label: "Spending", href: "/(tabs)/spending" },
+  { icon: "brain", label: "Vault & AI", href: "/vault-ai" },
   { icon: "server-network", label: "Server Setup", href: "/server-setup" },
-  { icon: "sale", label: "Deals & Plans", href: "/deals" },
-  { icon: "ticket-percent", label: "Promo Vault", href: "/promo-vault" },
-  { icon: "email-search", label: "Mail Codes", href: "/mail-codes" },
-  { icon: "account-multiple", label: "Accounts", href: "/accounts" },
-  { icon: "bookmark-multiple", label: "Link Vault", href: "/link-vault" },
-  { icon: "eye-check", label: "Watchlist", href: "/watchlist" },
-  { icon: "bell", label: "Reminders", href: "/reminders" },
-  { icon: "chart-donut", label: "Insights", href: "/insights" },
-  { icon: "graph", label: "Brain Map", href: "/graph" },
 ];
 
 export default function Home() {
@@ -105,10 +101,10 @@ export default function Home() {
             {/* Live overview: separate subscriptions, accounts, saved plans and inbox work */}
             <View style={{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 18, marginTop: 12, gap: 10 }}>
               {[
-                { label: "ACTIVE PLANS", value: vault.data?.active_subscriptions ?? "—", icon: "wallet", route: "/(tabs)/subscriptions", color: colors.accentRed },
-                { label: "ACCOUNTS", value: vault.data?.accounts ?? "—", icon: "account-key", route: "/accounts", color: colors.accentBlue },
-                { label: "SAVED PLANS", value: vault.data?.saved_plans ?? "—", icon: "bookmark", route: "/watchlist", color: colors.accentPurple },
-                { label: "NEEDS REVIEW", value: vault.data?.needs_review ?? "—", icon: "shield-alert", route: "/(tabs)/inbox", color: colors.accentGreen },
+                { label: "SUBSCRIPTIONS", value: vault.data?.active_subscriptions ?? "—", icon: "wallet", route: "/(tabs)/subscriptions", color: colors.accentRed },
+                { label: "ACCOUNTS", value: vault.data?.accounts ?? "—", icon: "account-key", route: "/(tabs)/account-hub", color: colors.accentBlue },
+                { label: "RENEWALS (30D)", value: renews, icon: "calendar-clock", route: "/(tabs)/renewals", color: colors.accentPurple },
+                { label: "SPENDING", value: Object.keys(vault.data?.monthly_by_currency||{}).length ? "View" : "—", icon: "chart-donut", route: "/(tabs)/spending", color: colors.accentGreen },
               ].map(item => <Card key={item.label} onPress={() => router.push(item.route as any)}
                 style={{ width: "48%", flexGrow: 1, gap: 8, borderColor: colors.border, minHeight: 112 }}>
                 <Icon name={item.icon} color={item.color} size={22}/>
@@ -117,6 +113,20 @@ export default function Home() {
               </Card>)}
             </View>
 
+            {/* Optional intelligence vault, kept separate from primary finance tabs */}
+            <Card style={{ marginHorizontal:18,marginTop:16,backgroundColor:colors.surfaceSecondary,borderColor:colors.brandPrimary+"35" }}
+                  onPress={()=>router.push("/vault-ai")}>
+              <View style={{flexDirection:"row",alignItems:"center",gap:13}}>
+                <View style={{width:50,height:50,borderRadius:16,backgroundColor:colors.brandPrimary+"1C",alignItems:"center",justifyContent:"center"}}>
+                  <Icon name="brain" color={colors.brandPrimary} size={27}/>
+                </View>
+                <View style={{flex:1,gap:4}}>
+                  <Text style={{color:colors.onSurface,fontSize:17,fontWeight:"800"}}>Vault & AI</Text>
+                  <Text style={{color:colors.muted,fontSize:12,lineHeight:18}}>Brain Map · Promo Vault · AI Prompts · Links</Text>
+                </View>
+                <Icon name="chevron-right" color={colors.brandPrimary} size={22}/>
+              </View>
+            </Card>
             {/* Quick actions */}
             <View style={styles.quickRow}>
               {QUICK.map((q) => (
