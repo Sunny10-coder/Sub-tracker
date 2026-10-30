@@ -10,7 +10,6 @@ const ACTIONS = [
   { icon: "account-plus", label: "Account", tone: "mint", href: "/add-account" },
   { icon: "brain", label: "Vault & AI", tone: "peach", href: "/vault-ai" },
   { icon: "sale", label: "Find Deals", tone: "brand", href: "/deals" },
-  { icon: "email-search", label: "Mail Codes", tone: "mint", href: "/mail-codes" },
   { icon: "ticket-percent", label: "Promo Vault", tone: "peach", href: "/promo-vault" },
   { icon: "camera", label: "Scan Screenshot", tone: "brand", href: "/scan?mode=camera" },
   { icon: "image-multiple", label: "Choose Photo", tone: "mint", href: "/scan?mode=library" },
@@ -62,8 +61,8 @@ const useStyles = makeStyles((colors) => ({
   backdrop: { ...{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }, backgroundColor: "#00000066" },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
     paddingHorizontal: 20,
     paddingTop: 12,
   },
@@ -71,6 +70,6 @@ const useStyles = makeStyles((colors) => ({
   title: { color: colors.onSurface, fontSize: 20, fontWeight: "800", marginBottom: 16 },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   tile: { width: "23%", alignItems: "center", marginBottom: 20, gap: 8 },
-  tileIcon: { width: 60, height: 60, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  tileIcon: { width: 60, height: 60, borderRadius: 2, alignItems: "center", justifyContent: "center" },
   tileLabel: { color: colors.onSurfaceSecondary, fontSize: 11, fontWeight: "600", textAlign: "center" },
 }));
