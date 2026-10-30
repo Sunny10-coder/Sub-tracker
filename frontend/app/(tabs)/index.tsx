@@ -21,6 +21,7 @@ const QUICK = [
 ];
 
 const SHORTCUTS = [
+  { icon: "server-network", label: "Server Setup", href: "/server-setup" },
   { icon: "sale", label: "Deals & Plans", href: "/deals" },
   { icon: "ticket-percent", label: "Promo Vault", href: "/promo-vault" },
   { icon: "email-search", label: "Mail Codes", href: "/mail-codes" },
