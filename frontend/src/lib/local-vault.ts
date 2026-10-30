@@ -73,7 +73,8 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
    accounts:asArray(data.accounts).map(normalizeAccount),
    watchlist:asArray(data.watchlist).map(normalizeWatch),
    promo_codes:asArray(data.promo_codes).map(normalizePromo),
-   review_queue:asArray(data.review_queue),benefits:asArray(data.benefits),
+   review_queue:asArray(data.review_queue).map((a,i)=>({...a,id:a.id||"review-"+normalized([a.source_row,a.provider,a.field,a.reason,i].join("|"))})),
+   benefits:asArray(data.benefits),
    mail_activity:asArray(data.mail_activity)
   };
   const added:Dict={},duplicates:Dict={};
