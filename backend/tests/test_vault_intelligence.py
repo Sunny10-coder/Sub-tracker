@@ -40,3 +40,15 @@ def test_currency_totals_stay_separate_and_trials_are_free_until_paid():
         {"status": "Expired", "price": 50, "currency": "USD", "billing_cycle": "monthly"},
     ])
     assert totals == {"USD": 10.0, "AED": 35.0}
+
+def test_reminder_calendar_and_time_validation():
+    from vault_intelligence import validate_reminder_schedule
+    assert validate_reminder_schedule("2027-01-15", "08:30") == ("2027-01-15", "08:30")
+    with pytest.raises(ValueError):
+        validate_reminder_schedule("2027-02-30", "09:00")
+    with pytest.raises(ValueError):
+        validate_reminder_schedule("2027-01-15", "25:00")
+
+def test_link_duplicates_ignore_tracking_params():
+    assert canonicalize_url("https://example.com/a?utm_source=instagram&plan=pro") == canonicalize_url("https://example.com/a?plan=pro")
+    assert canonicalize_url("https://example.com/a?plan=basic") != canonicalize_url("https://example.com/a?plan=pro")
