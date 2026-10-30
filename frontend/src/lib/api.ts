@@ -17,6 +17,12 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
 
 export const api = {
   insights: () => req<any>("/insights"),
+  vaultDashboard: () => req<any>("/vault/dashboard"),
+  accounts: () => req<any[]>("/accounts"),
+  createAccount: (b: any) => req<any>("/accounts", { method: "POST", body: JSON.stringify(b) }),
+  updateAccount: (id: string, b: any) => req<any>(`/accounts/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  deleteAccount: (id: string) => req<any>(`/accounts/${id}`, { method: "DELETE" }),
+  checkDuplicate: (b: any) => req<any>("/subscriptions/check-duplicate", { method: "POST", body: JSON.stringify(b) }),
   subscriptions: (status?: string, category?: string) => {
     const p = new URLSearchParams();
     if (status) p.set("status", status);
@@ -71,6 +77,8 @@ export const api = {
 };
 
 // ------- hooks -------
+export const useVaultDashboard = () => useQuery({ queryKey: ["vault-dashboard"], queryFn: api.vaultDashboard });
+export const useAccounts = () => useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
 export const useInsights = () => useQuery({ queryKey: ["insights"], queryFn: api.insights });
 export const useSubscriptions = (status?: string, category?: string) =>
   useQuery({ queryKey: ["subscriptions", status, category], queryFn: () => api.subscriptions(status, category) });
@@ -88,7 +96,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["insights", "subscriptions", "inbox", "links", "watchlist", "reminders", "graph"].forEach((k) =>
+    ["vault-dashboard", "accounts", "insights", "subscriptions", "inbox", "links", "watchlist", "reminders", "graph"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }
