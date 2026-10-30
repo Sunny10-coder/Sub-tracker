@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "SubMind",
+    "name": "SubMind Next",
     "slug": "frontend",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "submind",
@@ -21,8 +21,13 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.emergent.subscriptionvault.z533ca",
-      "permissions": ["CAMERA", "RECORD_AUDIO", "READ_MEDIA_IMAGES"]
+      "package": "com.submind.next",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_MEDIA_IMAGES"
+      ],
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",
