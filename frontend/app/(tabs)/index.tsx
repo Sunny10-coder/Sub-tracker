@@ -16,11 +16,14 @@ function greeting() {
 const QUICK = [
   { icon: "camera", label: "Scan", href: "/scan?mode=camera", key: "accentRed" },
   { icon: "link-variant", label: "Save Link", href: "/paste-link", key: "accentBlue" },
-  { icon: "chat-processing", label: "Ask AI", href: "/(tabs)/ai", key: "accentPurple" },
+  { icon: "magnify", label: "Find Deals", href: "/deals", key: "accentPurple" },
   { icon: "bell-plus", label: "Remind", href: "/add-reminder", key: "accentGreen" },
 ];
 
 const SHORTCUTS = [
+  { icon: "sale", label: "Deals & Plans", href: "/deals" },
+  { icon: "ticket-percent", label: "Promo Vault", href: "/promo-vault" },
+  { icon: "email-search", label: "Mail Codes", href: "/mail-codes" },
   { icon: "account-multiple", label: "Accounts", href: "/accounts" },
   { icon: "bookmark-multiple", label: "Link Vault", href: "/link-vault" },
   { icon: "eye-check", label: "Watchlist", href: "/watchlist" },
