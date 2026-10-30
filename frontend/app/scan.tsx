@@ -6,6 +6,7 @@ import { ActivityIndicator, Linking, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, useInvalidateAll } from "@/src/lib/api";
+import { key, call, models } from "@/src/lib/direct-providers";
 import { money, formatDate } from "@/src/lib/format";
 import { AppHeader, Card, ConfidenceBadge, Icon, PrimaryButton } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
@@ -20,6 +21,7 @@ export default function Scan() {
   const [status, setStatus] = useState<"idle" | "picking" | "processing" | "done" | "error" | "blocked">("idle");
   const [preview, setPreview] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
+  const [errorMessage,setErrorMessage]=useState("");
   const started = useRef(false);
 
   useEffect(() => {
@@ -44,12 +46,15 @@ export default function Scan() {
       const asset = res.assets[0];
       setPreview(asset.uri);
       setStatus("processing");
-      const inbox = await api.ingestImage(asset.base64!, "screenshot");
-      setResult(inbox);
-      invalidate();
+      const k=await key("gemini");if(!k)throw Error("A working Gemini key is required. Configure it in API Keys.");
+      const available=await models("gemini");const model=available[0];if(!model)throw Error("No Gemini vision model is available.");
+      const response=await call("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{"x-goog-api-key":k},{contents:[{parts:[{text:"Extract service name, subscription plan, price, currency, renewal date, trial end and account email only if visible. Output a JSON object with provider,product,plan,category,price,currency,billing_cycle,renewal_date,trial_end,account_email,summary,content_type. Unknown fields must be null."},{inlineData:{mimeType:asset.mimeType||"image/jpeg",data:asset.base64}}]}],generationConfig:{responseMimeType:"application/json",maxOutputTokens:950}});
+      const raw=(response.candidates?.[0]?.content?.parts||[]).map((x:any)=>x.text||"").join("");
+      let extraction:any;try{extraction=JSON.parse(raw)}catch{throw Error("Could not parse the screenshot. Try another image.")}
+      setResult({extraction,status:"needs_review",confidence:0.7});
       setStatus("done");
-    } catch (e) {
-      setStatus("error");
+    } catch (e:any) {
+      setErrorMessage(e.message||"Screenshot recognition failed.");setStatus("error");
     }
   };
 
@@ -87,7 +92,7 @@ export default function Scan() {
         {status === "error" && (
           <Card style={styles.center}>
             <Icon name="alert-circle-outline" size={30} color={colors.error} />
-            <Text style={styles.centerText}>Something went wrong. Please try again.</Text>
+            <Text style={styles.centerText}>{errorMessage}</Text>
             <PrimaryButton title="Retry" icon="refresh" onPress={run} />
           </Card>
         )}
@@ -104,10 +109,10 @@ export default function Scan() {
             {ex.trial_end ? <Text style={styles.resultRow}>Trial ends: {formatDate(ex.trial_end)}</Text> : null}
             {ex.summary ? <Text style={styles.summary}>{ex.summary}</Text> : null}
             <Text style={styles.saved}>
-              {result.status === "auto_added" ? "✓ Auto-added to your library" : "Saved to Smart Inbox for review"}
+              {result.status === "auto_added" ? "✓ Auto-added to your library" : "Review extracted details before saving manually"}
             </Text>
             <View style={{ gap: 10, marginTop: 14 }}>
-              <PrimaryButton title="Review in Inbox" icon="inbox-arrow-down" onPress={() => router.replace("/(tabs)/inbox")} testID="scan-inbox" />
+              <PrimaryButton title="Add subscription manually" icon="wallet-plus" onPress={() => router.replace("/add-subscription")} testID="scan-inbox" />
               <PrimaryButton title="Scan another" icon="camera" variant="secondary" onPress={() => { setPreview(null); setResult(null); run(); }} />
             </View>
           </Card>
