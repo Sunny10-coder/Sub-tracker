@@ -1,7 +1,7 @@
 // SubMind API client + React Query hooks. All calls go through EXPO_PUBLIC_BACKEND_URL/api.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { storage } from "@/src/utils/storage";
-import { localRequest } from "@/src/lib/local-vault";
+import { getVault, localRequest } from "@/src/lib/local-vault";
 
 const DEFAULT_BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim().replace(/\/+$/, "");
 export const BACKEND_URL_STORAGE_KEY = "submind.backend_url";
@@ -13,7 +13,14 @@ export async function getBackendUrl(): Promise<string> {
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const baseUrl = await getBackendUrl();
-  if (!baseUrl) return localRequest<T>(path, opts);
+  // Once personal records have been imported, the phone remains the source of
+  // truth for all account/plan/vault records even when a remote AI backend exists.
+  const pathname = path.split("?")[0];
+  const localPrefixes = ["/subscriptions", "/accounts", "/insights", "/vault/dashboard",
+    "/links", "/watchlist", "/reminders", "/settings", "/inbox", "/graph", "/search",
+    "/deals/codes", "/deals/price-history", "/deals/track-price"];
+  const isLocalData = localPrefixes.some(prefix => pathname === prefix || pathname.startsWith(prefix + "/"));
+  if (!baseUrl || (isLocalData && !!(await getVault()).imported_at)) return localRequest<T>(path, opts);
   const res = await fetch(`${baseUrl}/api${path}`, {
     headers: { "Content-Type": "application/json" },
     ...opts,
