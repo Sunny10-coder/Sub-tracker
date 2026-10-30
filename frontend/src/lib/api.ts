@@ -73,17 +73,7 @@ export const api = {
   settings: () => req<any>("/settings"),
   patchSettings: (b: any) => req<any>("/settings", { method: "PATCH", body: JSON.stringify(b) }),
 
-  transcribe: async (uri: string): Promise<{ text: string }> => {
-    throw Error("Voice transcription is not yet configured without a backend.");
-/*
-    const form = new FormData();
-    form.append("file", { uri, name: "voice.m4a", type: "audio/mp4" } as any);
-    const baseUrl = await getBackendUrl();
-    if (!baseUrl) throw new Error("Backend not configured. Open Server Setup.");
-    const res = await fetch(`${baseUrl}/api/stt/transcribe`, { method: "POST", body: form as any });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json();
-*/  },
+  transcribe: async (_uri: string): Promise<{ text: string }> => { throw Error("Voice transcription requires a separate provider integration."); },
 };
 
 // ------- hooks -------
