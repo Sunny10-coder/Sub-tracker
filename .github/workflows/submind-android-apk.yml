@@ -1,4 +1,4 @@
-name: Build SubMind Android APK
+name: Build SubMind Next V2 Android APK
 
 on:
   push:
@@ -57,7 +57,7 @@ jobs:
       - name: Upload SubMind APK
         uses: actions/upload-artifact@v4
         with:
-          name: SubMind-Android-APK
+          name: SubMind-Next-V2-APK
           path: frontend/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 7
