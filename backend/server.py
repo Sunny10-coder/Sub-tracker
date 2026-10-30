@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
-from vault_intelligence import normalized_name, normalized_email, account_identity, find_subscription_match, canonicalize_url, content_fingerprint, spend_by_currency
+from vault_intelligence import normalized_name, normalized_email, account_identity, find_subscription_match, canonicalize_url, content_fingerprint, spend_by_currency, validate_reminder_schedule
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -375,6 +375,9 @@ class IngestLink(BaseModel):
     url: str
     source: str = "share"
     text: str = ""
+    reminder_date: Optional[str] = None
+    reminder_time: str = "09:00"
+    reminder_title: Optional[str] = None
 
 
 class IngestNotification(BaseModel):
@@ -443,20 +446,97 @@ async def _fetch_metadata(url: str) -> dict:
         return {"title": "", "thumbnail": None, "description": "", "text": ""}
 
 
+def _safe_canonical(url: str) -> str:
+    try:
+        return canonicalize_url(url)
+    except (ValueError, OverflowError):
+        return ""
+
+
+async def _upsert_link_reminder(link_id: str, date: str, time: str, title: str) -> dict:
+    validate_reminder_schedule(date, time)
+    link = await db.saved_links.find_one({"id": link_id, "user_id": USER_ID, "deleted_at": None})
+    if not link:
+        raise HTTPException(404, "Saved link not found")
+    existing = await db.reminders.find_one(await base_query({"ref_type": "link", "ref_id": link_id, "completed": False}))
+    if existing:
+        await db.reminders.update_one({"id": existing["id"], "user_id": USER_ID},
+                                      {"$set": {"due_date": date, "remind_time": time, "title": title,
+                                                "updated_at": now_iso()}})
+        rid = existing["id"]
+    else:
+        rid = str(uuid.uuid4())
+        await db.reminders.insert_one({"id": rid, "user_id": USER_ID, "deleted_at": None,
+                                        "title": title, "due_date": date, "remind_time": time,
+                                        "kind": "saved_link", "ref_type": "link", "ref_id": link_id,
+                                        "completed": False, "created_at": now_iso()})
+    await db.saved_links.update_one({"id": link_id, "user_id": USER_ID}, {"$set": {"reminder_id": rid, "updated_at": now_iso()}})
+    return clean(await db.reminders.find_one({"id": rid}))
+
+
+@api.put("/links/{lid}/reminder")
+async def put_link_reminder(lid: str, body: Dict[str, Any]):
+    date = body.get("due_date")
+    time = body.get("remind_time", "09:00")
+    try:
+        validate_reminder_schedule(date, time)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    return await _upsert_link_reminder(lid, date, time, str(body.get("title") or "Review saved link")[:180])
+
+
+@api.get("/links/{lid}/reminder")
+async def get_link_reminder(lid: str):
+    link = await db.saved_links.find_one(await base_query({"id": lid}))
+    if not link:
+        raise HTTPException(404, "Saved link not found")
+    rem = await db.reminders.find_one(await base_query({"ref_type": "link", "ref_id": lid, "completed": False}))
+    return clean(rem) if rem else None
+
+
 @api.post("/ingest/link")
 async def ingest_link(body: IngestLink):
-    # 1. Save link immediately (enrichment pending)
+    # Canonical URL deduplication; return the existing item instead of creating copies.
+    try:
+        canonical = canonicalize_url(body.url)
+    except (ValueError, OverflowError) as exc:
+        raise HTTPException(422, str(exc))
+    if body.reminder_date:
+        try:
+            validate_reminder_schedule(body.reminder_date, body.reminder_time)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+    existing = await db.saved_links.find_one(await base_query({"canonical_url": canonical}))
+    if not existing:
+        # Compatibility with pre-canonicalization records.
+        candidates = await db.saved_links.find(await base_query()).to_list(1000)
+        existing = next((doc for doc in candidates
+                         if isinstance(doc.get("url"), str)
+                         and _safe_canonical(doc.get("url")) == canonical), None)
+    if existing:
+        if body.text and body.text.strip() and body.text.strip() not in str(existing.get("note") or ""):
+            await db.saved_links.update_one({"id": existing["id"], "user_id": USER_ID},
+                                            {"$set": {"note": (str(existing.get("note") or "") + "\\n" + body.text.strip()).strip()[:2000],
+                                                      "updated_at": now_iso()}})
+        if body.reminder_date:
+            await _upsert_link_reminder(existing["id"], body.reminder_date, body.reminder_time,
+                                        body.reminder_title or existing.get("title") or "Review saved link")
+        return {"link_id": existing["id"], "duplicate": True, "link": clean(await db.saved_links.find_one({"id": existing["id"]}))}
+
     lid = str(uuid.uuid4())
-    domain = re.sub(r"^https?://(www\.)?", "", body.url).split("/")[0]
+    domain = canonical.split("/")[2]
     base_link = {
         "id": lid, "user_id": USER_ID, "deleted_at": None,
-        "url": body.url, "canonical_url": body.url,
+        "url": body.url.strip(), "canonical_url": canonical,
         "title": domain or body.url[:60], "source": body.source, "thumbnail": None,
         "summary": "", "category": "Other", "tags": [], "note": body.text[:500],
         "reminder_id": None, "related_subscription": None, "archived": False,
         "enrichment": "pending", "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.saved_links.insert_one(dict(base_link))
+    if body.reminder_date:
+        await _upsert_link_reminder(lid, body.reminder_date, body.reminder_time,
+                                    body.reminder_title or "Review saved link")
 
     # 2. Enrich (best effort)
     meta = await _fetch_metadata(body.url)
@@ -766,6 +846,7 @@ async def update_link(lid: str, body: Dict[str, Any]):
 
 @api.delete("/links/{lid}")
 async def delete_link(lid: str):
+    await db.reminders.update_many({"ref_type": "link", "ref_id": lid, "user_id": USER_ID, "deleted_at": None}, {"$set": {"deleted_at": now_iso()}})
     await db.saved_links.update_one({"id": lid, "user_id": USER_ID}, {"$set": {"deleted_at": now_iso()}})
     return {"ok": True}
 
@@ -849,6 +930,8 @@ async def create_reminder(body: Dict[str, Any]):
         "completed": False, "created_at": now_iso(),
     }
     await db.reminders.insert_one(dict(doc))
+    if doc["ref_type"] == "link" and doc["ref_id"]:
+        await db.saved_links.update_one({"id": doc["ref_id"], "user_id": USER_ID}, {"$set": {"reminder_id": rid}})
     return clean(doc)
 
 
@@ -863,6 +946,7 @@ async def update_reminder(rid: str, body: Dict[str, Any]):
 @api.delete("/reminders/{rid}")
 async def delete_reminder(rid: str):
     await db.reminders.update_one({"id": rid, "user_id": USER_ID}, {"$set": {"deleted_at": now_iso()}})
+    await db.saved_links.update_many({"reminder_id": rid, "user_id": USER_ID}, {"$set": {"reminder_id": None}})
     return {"ok": True}
 
 
