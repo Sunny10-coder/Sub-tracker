@@ -1,4 +1,4 @@
-name: Build SubMind Metro V2.2 Direct AI APK
+name: Build SubMind Metro V2.2 Direct Provider APK
 
 on:
   push:
