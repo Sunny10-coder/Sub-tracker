@@ -61,7 +61,16 @@ export default function Settings() {
           </Card>
         </Section>
 
-        <Section title="Your data"><ToggleRowStatic icon="file-import-outline" label="Import subscriptions, accounts and promos" onPress={() => router.push("/import-data")} /></Section>
+        <Section title="Connected services">
+          <ToggleRowStatic icon="gmail" label="Gmail read-only scanning and mailbox switching" onPress={() => router.push("/gmail-sync")} />
+          <ToggleRowStatic icon="clipboard-check-outline" label="Review extracted Gmail records" onPress={() => router.push("/mail-review")} />
+          <ToggleRowStatic icon="radar" label="Monitor selected promo sources" onPress={() => router.push("/promo-vault")} />
+        </Section>
+
+        <Section title="Your data">
+          <ToggleRowStatic icon="file-import-outline" label="Import accounts, plans, prompts, promos and links" onPress={() => router.push("/import-data")} />
+          <ToggleRowStatic icon="database-export-outline" label="Export complete private JSON backup" onPress={() => router.push("/export-data")} />
+        </Section>
 
         <Section title="AI & Search"><ToggleRowStatic icon="shield-key-outline" label="Manage and test Gemini, Groq, NVIDIA and Brave keys" onPress={() => router.push("/api-keys")} /></Section>
 
