@@ -74,7 +74,7 @@ export default function GmailSync() {
       </View>
       <View style={card}>
         <Text style={{...txt,fontSize:18,fontWeight:"900"}}>SCAN SUBSCRIPTIONS & OFFERS</Text>
-        <Text style={{color:METRO.dim,fontSize:12,lineHeight:19}}>Find account creations, paid subscriptions, renewals, trials, coupons, giveaways and promotions. All matches go to your review inbox before creating records.</Text>
+        <Text style={{color:METRO.dim,fontSize:12,lineHeight:19}}>Precision mode: checks specific subject lines, verifies transactional evidence and rejects generic newsletters, routine receipts, login codes and incidental marketing text. Only strong matches enter review.</Text>
         <View style={{flexDirection:"row",gap:7}}>
           {[30,180,730].map(d=><Pressable key={d} onPress={()=>setDays(d)} style={{flex:1,padding:11,borderRadius:7,alignItems:"center",backgroundColor:days===d?METRO.purple:"#262633"}}>
             <Text style={{color:METRO.white,fontWeight:"800",fontSize:12}}>{d===30?"30 DAYS":d===180?"6 MONTHS":"2 YEARS"}</Text>
