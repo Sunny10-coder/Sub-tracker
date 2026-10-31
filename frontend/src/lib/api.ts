@@ -84,7 +84,7 @@ async function req<T>(path:string,opts?:RequestInit):Promise<T>{
      JSON.stringify({subscriptions:vault.subscriptions.slice(0,120),accounts:vault.accounts.slice(0,100),benefits:vault.benefits.slice(0,80),
        links:vault.links.slice(0,80),promos:vault.promo_codes.slice(0,80),watchlist:vault.watchlist.slice(0,60)}).slice(0,22000);
     const p=await storage.getItem("submind.ai.selected-provider","gemini");
-    const provider=p==="groq"||p==="nvidia"?"nvidia"===p?"nvidia":"groq":"gemini";
+    const provider=p==="groq"||p==="nvidia"?p:"gemini";
     const model=String(await storage.getItem("submind.ai.selected-model."+provider,"")||"");
     return await direct.chat(question,context,provider,model||undefined) as T;
   }
@@ -135,6 +135,9 @@ export const api = {
   insights: () => req<any>("/insights"),
   accounts: () => localRequest<any[]>("/accounts"),
   createAccount: (b:any) => localRequest<any>("/accounts",{method:"POST",body:JSON.stringify(b)}),
+  account: (id:string) => localRequest<any>("/accounts/"+encodeURIComponent(id)),
+  updateAccount: (id:string,b:any) => localRequest<any>("/accounts/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify(b)}),
+  deleteAccount: (id:string) => localRequest<any>("/accounts/"+encodeURIComponent(id),{method:"DELETE"}),
   vaultDashboard: () => localRequest<any>("/vault/dashboard"),
   prompts: () => localRequest<any[]>("/prompts"),
   createPrompt: (b:any) => localRequest<any>("/prompts",{method:"POST",body:JSON.stringify(b)}),
@@ -179,7 +182,7 @@ export const api = {
   inboxAction: (id: string, b: any) => req<any>(`/inbox/${id}/action`, { method: "POST", body: JSON.stringify(b) }),
 
   links: (source?: string) => req<any[]>(`/links${source && source !== "All" ? `?source=${encodeURIComponent(source)}` : ""}`),
-  linkTags: () => req<{ tag: string; count: number }[]>("/links/tags"),
+  linkTags: () => localRequest<{ tag: string; count: number }[]>("/links/tags"),
   link: (id: string) => req<any>(`/links/${id}`),
   linkOpened: (id: string) => req<any>(`/links/${id}/opened`, { method: "POST" }),
   linkRemind: (id: string, b: { days?: number; date?: string; title?: string }) =>
