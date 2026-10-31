@@ -9,7 +9,7 @@ import { api } from "@/src/lib/api";
 import { AppHeader, Icon } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 import { TAB_BAR_SPACE } from "./_layout";
-import { chat as chatDirect, key as savedKey, models as fetchModels } from "@/src/lib/direct-providers";
+import { chat as chatDirect, key as savedKey, models as fetchModels, AUTO_NVIDIA_MODEL } from "@/src/lib/direct-providers";
 import { getVault } from "@/src/lib/local-vault";
 import { METRO } from "@/src/components/metro-tiles";
 
@@ -33,11 +33,21 @@ export default function AskAI() {
   const [provider,setProvider]=useState<"gemini"|"groq"|"nvidia">("gemini");
   const [available,setAvailable]=useState<string[]>([]);
   const [model,setModel]=useState("");
+  const [modelError,setModelError]=useState("");
   const [transcribing, setTranscribing] = useState(false);
   const listRef = useRef<FlatList>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
-  useEffect(()=>{(async()=>{try{if(provider!=="nvidia"){const list=await fetchModels(provider);setAvailable(list);setModel(list[0]||"")}else {setAvailable(["meta/llama-3.1-8b-instruct"]);setModel("meta/llama-3.1-8b-instruct")}}catch{setAvailable([]);setModel("")}})()},[provider]);
+  useEffect(()=>{
+    let active=true;
+    setAvailable([]);setModel(provider==="nvidia"?AUTO_NVIDIA_MODEL:"");setModelError("");
+    (async()=>{try {
+      const list=await fetchModels(provider);
+      if(active){setAvailable(provider==="nvidia"?[AUTO_NVIDIA_MODEL,...list]:list);setModel(provider==="nvidia"?AUTO_NVIDIA_MODEL:list[0]||"");}
+    }catch(e:any){if(active){setModelError(e.message||String(e));setModel(provider==="nvidia"?AUTO_NVIDIA_MODEL:"");}}
+    })();
+    return()=>{active=false};
+  },[provider]);
   useEffect(() => {
     api.chatHistory().then((h) => {
       const msgs: Msg[] = [];
@@ -109,7 +119,15 @@ export default function AskAI() {
       <View style={{flexDirection:"row",gap:7,paddingHorizontal:16,paddingBottom:10}}>
         {(["gemini","groq","nvidia"] as const).map(p=><Pressable key={p} onPress={()=>setProvider(p)} style={{flex:1,padding:11,backgroundColor:provider===p?METRO.cyan:"#222",alignItems:"center"}}><Text style={{color:provider===p?METRO.ink:"#fff",fontWeight:"800"}}>{p.toUpperCase()}</Text></Pressable>)}
       </View>
-      {available.length>1?<View style={{paddingHorizontal:16,paddingBottom:9,flexDirection:"row",gap:7}}><Text style={{color:METRO.dim,fontSize:12,flex:1}} numberOfLines={1}>Model: {model||"Choose"}</Text><Pressable onPress={()=>{const i=available.indexOf(model);setModel(available[(i+1)%available.length])}}><Text style={{color:METRO.cyan,fontWeight:"700"}}>Change model →</Text></Pressable></View>:null}
+      <View style={{paddingHorizontal:16,paddingBottom:9,gap:5}}>
+        <Text style={{color:METRO.cyan,fontSize:12,fontWeight:"700"}} numberOfLines={2}>
+          Model: {model===AUTO_NVIDIA_MODEL?"Auto · best working NVIDIA agent":model||"No models available"}
+        </Text>
+        {available.length>1?<Pressable onPress={()=>{const i=available.indexOf(model);setModel(available[(i+1)%available.length])}}>
+          <Text style={{color:METRO.white,fontSize:12,fontWeight:"700"}}>CHANGE MODEL ({available.length} choices)</Text>
+        </Pressable>:null}
+        {modelError?<Text style={{color:METRO.orange,fontSize:11}}>{modelError}</Text>:null}
+      </View>
       <KeyboardAvoidingView behavior="translate-with-padding" style={{ flex: 1 }} keyboardVerticalOffset={0}>
         {messages.length === 0 ? (
           <View style={styles.emptyWrap}>
