@@ -1,4 +1,4 @@
-name: Build SubMind Metro v2.4 Android APK
+name: Build SubMind Gmail Precision APK
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
       - '.github/workflows/submind-v23-android-apk.yml'
   workflow_dispatch:
 
-# Run once per workflow file update; no build on every source push.
+# One-off merge verification of Gmail precision native APK.
 
 permissions:
   contents: read
@@ -25,7 +25,7 @@ jobs:
       EXPO_NO_TELEMETRY: '1'
       EXPO_PUBLIC_BACKEND_URL: ''
     steps:
-      - name: Checkout SubMind 2.4
+      - name: Checkout Gmail precision
         uses: actions/checkout@v4
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -58,10 +58,10 @@ jobs:
           else
             echo "APK filename may vary"
           fi
-      - name: Upload SubMind v2.4 test APK
+      - name: Upload SubMind Gmail precision APK
         uses: actions/upload-artifact@v4
         with:
-          name: SubMind-Metro-v2.4-Android-APK
+          name: SubMind-Gmail-Precision-Android-APK
           path: frontend/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 7
