@@ -1,4 +1,4 @@
-name: SubMind Lumia Home + Archive APK
+name: SubMind Lumia Home + Archive APK — verified rebuild 2
 
 # One-shot: only creation/edits of this workflow trigger it on the integration
 # branch. Subsequent app edits do not produce automatic GitHub billing.
