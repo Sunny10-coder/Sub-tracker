@@ -190,7 +190,7 @@ export async function analyzePublicLink(record:Record<string,any>,useAI=true):Pr
    inferTags(evidence||String(record.url||""),base.tags||[]),
    ...list(ai?.tags,9).map(x=>x.toLowerCase())]).slice(0,16);
  const search_keywords=unique([...guessKeywords(evidence),...list(ai?.search_keywords,15)]).slice(0,40);
- const category=CATEGORIES.has(String(ai?.category))?ai.category:
+ const category=CATEGORIES.has(String(ai?.category))?ai!.category:
    evidence?inferCategory(evidence):base.category;
  const summary=clean(ai?.summary,250)||clean(source.description,260)||
    (source.basis==="url_only"?"Link saved. Content could not be read; no features were inferred.":"Public metadata saved; open source for details.");
