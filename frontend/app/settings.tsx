@@ -30,8 +30,8 @@ export default function Settings() {
       <AppHeader title="Settings" back />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 30, gap: 16 }} showsVerticalScrollIndicator={false}>
         <Section title="AI & processing">
-          <ToggleRow icon="brain" label="AI processing" value={data.ai_enabled} onChange={(v) => set("ai_enabled", v)} />
-          <ToggleRow icon="image-lock" label="Keep original screenshots" sub="Off = extract then discard image" value={data.keep_screenshots} onChange={(v) => set("keep_screenshots", v)} />
+          <ToggleRow icon="brain" label="AI processing" value={data.ai_enabled} onChange={(v: boolean) => set("ai_enabled", v)} />
+          <ToggleRow icon="image-lock" label="Keep original screenshots" sub="Off = extract then discard image" value={data.keep_screenshots} onChange={(v: boolean) => set("keep_screenshots", v)} />
           <View style={styles.rowCol}>
             <Text style={styles.label}>Auto-add confidence</Text>
             <Text style={styles.sub}>Items above this are added automatically ({thresholdPct}%).</Text>
@@ -51,7 +51,7 @@ export default function Settings() {
         </Section>
 
         <Section title="Monitoring">
-          <ToggleRow icon="chart-line" label="Price monitoring" sub="Track watchlist plan prices" value={data.price_monitoring} onChange={(v) => set("price_monitoring", v)} />
+          <ToggleRow icon="chart-line" label="Price monitoring" sub="Track watchlist plan prices" value={data.price_monitoring} onChange={(v: boolean) => set("price_monitoring", v)} />
         </Section>
 
         <Section title="Privacy">
