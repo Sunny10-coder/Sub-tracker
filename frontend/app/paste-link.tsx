@@ -100,7 +100,7 @@ export default function PasteLink() {
       <KeyboardStickyView>
         <View style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
           <PrimaryButton title="Save link" icon="bookmark-plus-outline" onPress={() => save.mutate()} loading={save.isPending} disabled={!url.trim()} testID="link-save" />
-          {save.isError ? <Text style={[styles.hint, { color: colors.error, marginTop: 6 }]}>Could not save. Check your server address in Settings.</Text> : null}
+          {save.isError ? <Text style={[styles.hint, { color: colors.error, marginTop: 6 }]}>{(save.error as Error)?.message||"Could not save. Please check the URL."}</Text> : null}
         </View>
       </KeyboardStickyView>
     </View>
