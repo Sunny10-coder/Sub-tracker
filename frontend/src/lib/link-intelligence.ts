@@ -8,7 +8,7 @@ export async function enrichLinkWithGemini(record: any): Promise<{title:string;s
  const token=await key("gemini");
  if(!token)throw Error("Add a Gemini API key in Settings → API Keys first.");
  const available=await models("gemini");
- const model=available.find(x=>/flash/i.test(x))||available[0];
+ const model=available.find((x:string)=>/flash/i.test(x))||available[0];
  if(!model)throw Error("No Gemini text generation models are available.");
  const payload={
   contents:[{parts:[{text:JSON.stringify({
