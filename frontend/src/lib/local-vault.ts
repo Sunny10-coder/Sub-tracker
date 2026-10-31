@@ -647,23 +647,47 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  }else if(route.startsWith("/inbox/")){
     result=v.review_queue.find(x=>x.id===route.split("/")[2])||notFound();
  }else if(route==="/memory/dashboard"){
+    const currency=string(v.settings.currency)||"AED";
     const radar=v.subscriptions.filter(x=>["Active","Trial"].includes(x.status)).map(x=>{
       const deadline=dueDate(x),days=futureDays(deadline);
-      return {id:x.id,provider:x.provider,days_left:days,charge_date:deadline,
+      return {id:x.id,provider:x.provider,plan:x.plan,days_left:days,charge_date:deadline,
         cancel_by:deadline,price:x.price,currency:x.currency,is_trial:x.status==="Trial",
+        urgency:days!==null&&days<=3?"urgent":days!==null&&days<=7?"soon":"later",
         account_email:x.account_email,where:{
-          url:x.cancel_url||null,
-          steps:x.cancel_url?"Open the saved provider cancellation URL and confirm cancellation.":"Cancellation instructions have not been confirmed. Check the provider billing settings."
+          url:x.cancel_url||null,source:x.cancel_url?"saved":"unknown",
+          steps:x.cancel_url?"Open your saved cancellation page. Confirm the provider has processed the cancellation.":"Cancellation route not confirmed. Check the provider billing or membership settings."
         }};
-    }).filter(x=>x.days_left!==null&&x.days_left>=0&&x.days_left<=30).sort((a,b)=>(a.days_left??99)-(b.days_left??99));
-    const accountMap=new Map<string,any[]>();
+    }).filter(x=>x.days_left!==null&&x.days_left>=0&&x.days_left<=30)
+      .sort((a,b)=>(a.days_left??99)-(b.days_left??99));
+    const accountMap=new Map<string,Dict[]>();
     for(const sub of v.subscriptions){const mail=string(sub.account_email)||"unknown";
-      accountMap.set(mail,[...(accountMap.get(mail)||[]),{provider:sub.provider,plan:sub.plan,status:sub.status,id:sub.id}]);}
-    result={cancel_radar:radar,urgent_count:radar.filter(x=>(x.days_left??99)<=3).length,
-      promos:v.promo_codes.slice(0,25),
-      accounts_by_email:[...accountMap].map(([email,subscriptions])=>({email,subscriptions})),
-      missing_info:v.subscriptions.filter(x=>!x.account_email||!x.renewal_date||x.price==null||x.status==="Unknown").slice(0,100),
-      links:v.links.slice(0,40),accounts:v.accounts.length};
+      accountMap.set(mail,[...(accountMap.get(mail)||[]),sub]);}
+    const missing=v.subscriptions.map(x=>{
+      const fields:string[]=[];
+      if(!string(x.account_email))fields.push("account_email");
+      if(!dueDate(x))fields.push("renewal_date");
+      if(x.price==null)fields.push("price");
+      if(!string(x.currency))fields.push("currency");
+      if(x.status==="Unknown")fields.push("status");
+      return {...x,missing:fields};
+    }).filter(x=>x.missing.length).slice(0,100);
+    const promos=v.promo_codes.map(p=>({...p,ref_id:p.id,
+      description:string(p.description||p.discount_text),expires:p.expiry_date||null,
+      days_left:futureDays(p.expiry_date)})).filter(p=>p.code).slice(0,100);
+    const dont_forget=v.links.map(l=>{
+      const reminder=v.reminders.find(r=>r.ref_type==="link"&&r.ref_id===l.id&&!r.completed);
+      const date=string(l.reminder_due||reminder?.due_date);
+      const age=Math.max(0,Math.floor((Date.now()-(Date.parse(l.created_at)||Date.now()))/86400000));
+      const reason=date?"reminder":!l.opened_count&&age>=7?"unopened":null;
+      return reason?{...l,reason,due_date:date||null,days_left:date?futureDays(date):null,age_days:age}:null;
+    }).filter(Boolean).slice(0,50);
+    result={currency,cancel_radar:radar,urgent_count:radar.filter(x=>(x.days_left??99)<=3).length,
+      promos,accounts_by_email:[...accountMap].map(([email,subscriptions])=>{
+        const currencies=new Set(subscriptions.filter(x=>x.price!=null).map(x=>x.currency));
+        const charges=subscriptions.map(x=>charge(x));
+        return {email,subscriptions,monthly_total:currencies.size<=1&&charges.every(x=>x!==null)?
+          charges.reduce((a,b)=>a+(b||0),0):null};
+      }),missing_info:missing,dont_forget,links:v.links.slice(0,40),accounts:v.accounts.length};
  }else if(route==="/ai/compare"){
     result={items:[],comparison:"Choose two saved plans to compare. Prices and benefits not present in your vault remain unknown."};
  } else if(route==="/graph")result=graphFromVault(v);
