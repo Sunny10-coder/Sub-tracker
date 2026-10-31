@@ -4,7 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/src/components/ui";
-import { useInbox, useReminders, useSubscriptions, useSettings } from "@/src/lib/api";
+import { useInbox, useReminders, useSubscriptions, useSettings, useArchivedSubscriptions } from "@/src/lib/api";
 import { syncReminderNotifications } from "@/src/lib/notify";
 import { makeStyles, useTheme } from "@/src/theme";
 
@@ -85,9 +85,10 @@ export default function TabsLayout() {
   // Mirror server reminders to local notifications whenever they change.
   const reminders = useReminders();
   const subs=useSubscriptions();
+  const archived=useArchivedSubscriptions();
   const settings=useSettings();
   useEffect(() => {
-    if(!reminders.data||!subs.data)return;
+    if(!reminders.data||!subs.data||!archived.data)return;
     const lead=Math.max(1,Math.min(30,Number(settings.data?.cancel_notice_days)||3));
     const auto=(subs.data||[]).filter((sub:any)=>["active","trial"].includes(String(sub.status||"").toLowerCase()))
       .filter((sub:any)=>sub.auto_renew!==false)
@@ -103,9 +104,12 @@ export default function TabsLayout() {
       }).filter(Boolean);
     // The notification mirror cancels any previously scheduled item absent
     // from the latest list, including subscriptions moved to Accounts archive.
-    void syncReminderNotifications([...(reminders.data||[]).filter((r:any)=>!String(r.ref_id||"").trim()||
-      !["cancelled","expired"].includes(String(subs.data?.find((sub:any)=>String(sub.id)===String(r.ref_id))?.status||"").toLowerCase())),...auto] as any);
-  },[reminders.data,subs.data,settings.data?.cancel_notice_days]);
+    const archivedIds=new Set((archived.data||[]).map((x:any)=>String(x.id)));
+    void syncReminderNotifications([
+      ...(reminders.data||[]).filter((r:any)=>!archivedIds.has(String(r.ref_id||""))),
+      ...auto
+    ] as any);
+  },[reminders.data,subs.data,archived.data,settings.data?.cancel_notice_days]);
 
   return (
     <Tabs tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false }}>
