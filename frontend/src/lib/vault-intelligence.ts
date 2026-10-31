@@ -137,10 +137,10 @@ export function graphFromVault(v: VaultItem): { nodes: VaultItem[]; edges: Vault
     tagsFor(id, l);
   }
   for (const p of (v.prompts || []).slice(0, 60)) {
-    const id = add("prompt", p.id, p.title, { ref_id: p.id });
+    const id = add(p.kind === "idea" ? "idea" : "prompt", p.id, p.title, { ref_id: p.id });
     tagsFor(id, p);
     for (const related of (p.related_ids || []).slice(0, 10)) {
-      for (const kind of ["link", "subscription", "account", "prompt"]) connect(id, kind + ":" + related, "related");
+      for (const kind of ["link", "subscription", "account", "prompt", "idea"]) connect(id, kind + ":" + related, "related");
     }
   }
   for (const promo of (v.promo_codes || []).slice(0, 60)) {
