@@ -19,7 +19,7 @@ const AI_PROMPTS = [
 const SMALL_TILES = [
   { icon: "eye-check", label: "plans", href: "/watchlist", key: "accentBlue" },
   { icon: "chart-donut", label: "insights", href: "/insights", key: "accentGreen" },
-  { icon: "graph", label: "brain map", href: "/graph", key: "accentPurple" },
+  { icon: "graph", label: "brain map", href: "/tool-brain", key: "accentPurple" },
   { icon: "magnify", label: "search", href: "/search", key: "accentOrange" },
   { icon: "camera", label: "scan", href: "/scan?mode=camera", key: "accentRed" },
   { icon: "link-variant", label: "paste link", href: "/paste-link", key: "accentPink" },
@@ -56,7 +56,7 @@ export default function Start() {
   const promos: any[] = mem.data?.promos ?? [];
   const reviewItems: any[] = review.data ?? [];
   const allLinks: any[] = links.data ?? [];
-  const repos = allLinks.filter((l) => l.kind === "github");
+  const repos = allLinks.filter((l) => l.kind === "github" || (typeof l.url==="string" && /^https?:\/\/(www\.)?github\.com\//i.test(l.url)));
   const upcoming = (rems.data ?? []).filter((r: any) => !r.completed).slice(0, 4);
   const accounts: any[] = mem.data?.accounts_by_email ?? [];
   const missing: any[] = mem.data?.missing_info ?? [];
@@ -83,50 +83,9 @@ export default function Start() {
         </View>
 
         <View style={[styles.grid, { paddingHorizontal: pad, gap }]}>
-          {/* Spend — wide live tile */}
-          <Tile
-            wide title="spending" icon="wallet" color={colors.accentBlue} onPress={go("/insights")} testID="tile-spend" delay={0}
-            hint={`${money(ins.data?.monthly_spend, cur)} a month`}
-            faces={[
-              <View key="m"><TileBig>{money(ins.data?.monthly_spend, cur)}</TileBig><TileLine>a month · {ins.data?.active_count ?? 0} active</TileLine></View>,
-              <View key="y"><TileBig>{money(ins.data?.yearly_spend, cur)}</TileBig><TileLine>a year at this pace</TileLine></View>,
-              <View key="r"><TileBig>{ins.data?.renewals_30d?.length ?? 0}</TileBig><TileLine>renewals in the next 30 days</TileLine></View>,
-            ]}
-          />
-
-          <View style={[styles.row, { gap }]}>
-            {/* Cancel radar */}
-            <Tile
-              title="cancel soon" icon="calendar-alert" color={colors.accentRed} badge={urgent} onPress={go("/memory")} testID="tile-cancel" delay={600}
-              hint={radar[0] ? `${radar[0].provider}, ${cancelByLabel(radar[0].days_left, radar[0].cancel_by)}` : "nothing to cancel"}
-              faces={radar.length
-                ? radar.slice(0, 3).map((c) => (
-                  <View key={c.id}><TileLine strong>{c.provider}</TileLine><TileBig>{c.days_left < 0 ? "!" : c.days_left}</TileBig><TileLine>{c.days_left < 0 ? "overdue" : c.days_left === 1 ? "day left to cancel" : "days left to cancel"}</TileLine></View>
-                ))
-                : [<View key="ok"><TileBig>✓</TileBig><TileLine>nothing to cancel soon</TileLine></View>]}
-            />
-            {/* Inbox */}
-            <Tile
-              title="to review" icon="inbox-arrow-down" color={colors.accentOrange} onPress={go("/(tabs)/inbox")} testID="tile-inbox" delay={1200}
-              hint={`${reviewItems.length} items need review`}
-              faces={[
-                <View key="n"><TileBig>{reviewItems.length}</TileBig><TileLine>{reviewItems.length === 1 ? "item waiting" : "items waiting"}</TileLine></View>,
-                ...reviewItems.slice(0, 2).map((i) => (
-                  <View key={i.id}><TileLine strong>{i.extraction?.provider || i.extraction?.product || "Unknown"}</TileLine><TileLine>{i.suggested_destination === "plan" ? "looks like a plan or offer" : "choose account or plan"}</TileLine></View>
-                )),
-              ]}
-            />
-          </View>
-
-          {/* Ask AI — wide, always visible */}
-          <Tile
-            wide title="ask ai" icon="robot-happy" color={colors.accentPink} onPress={go("/(tabs)/ai")} testID="tile-ai" delay={300}
-            hint="Ask about your subscriptions"
-            faces={AI_PROMPTS.map((p, i) => (
-              <View key={p}><TileLine strong>{i === 0 ? "ask me anything" : "try asking"}</TileLine><TileMid>{p}</TileMid></View>
-            ))}
-          />
-
+          {/* Prioritise the exact Lumia layout selected by the user: two rows of
+              2-up memory/link tiles, wide reminder, then the shortcut grid.
+              Live values and animations are retained. */}
           <View style={[styles.row, { gap }]}>
             <Tile
               title="my memory" icon="head-snowflake-outline" color={colors.accentPurple} onPress={go("/memory")} testID="tile-memory" delay={900}
