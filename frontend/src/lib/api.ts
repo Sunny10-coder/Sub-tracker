@@ -7,6 +7,7 @@ import { storage } from "@/src/utils/storage";
 import { getVault, localRequest, localInsights } from "@/src/lib/local-vault";
 import * as direct from "@/src/lib/direct-providers";
 import { recommendToolsForGoal, isGoalQuery } from "@/src/lib/tool-goal-matcher";
+import { publicGitHubMetadata } from "@/src/lib/link-intelligence";
 
 const SERVER_KEY = "server_url";
 const BUILD_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
@@ -242,8 +243,23 @@ export const api = {
     const record=await localRequest<any>("/inbox/ingest-extraction",{method:"POST",body:JSON.stringify({source,extraction:extracted})});
     return record;
   },
-  ingestLink: (url: string, source = "share", text = "", extra: { tags?: string[]; remind_in_days?: number } = {}) =>
-    req<any>("/ingest/link", { method: "POST", body: JSON.stringify({ url, source, text, ...extra }) }),
+  ingestLink: async (url:string,source="share",text="",
+    extra:{tags?:string[];remind_in_days?:number}={}) => {
+    const item=await req<any>("/ingest/link",{method:"POST",body:JSON.stringify({url,source,text,...extra})});
+    if(!serverUrl&&item?.link_id&&!item?.duplicate){
+      try{
+        const more=await publicGitHubMetadata(url);
+        if(more){
+          const saved=await localRequest<any>("/links/"+encodeURIComponent(item.link_id),{
+            method:"PATCH",body:JSON.stringify({...more,
+              tags:Array.from(new Set([...(item.link?.tags||[]),...(more.tags||[])]))})
+          });
+          return {...item,link:saved};
+        }
+      }catch{ /* GitHub metadata is optional, the local bookmark is already saved. */ }
+    }
+    return item;
+  },
   ingestEmail: (b: { subject?: string; sender?: string; to?: string; body: string }) =>
     req<any>("/ingest/email", { method: "POST", body: JSON.stringify(b) }),
 
