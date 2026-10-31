@@ -6,6 +6,11 @@ on:
       - feature/submind-unified-vault-gmail-20261031
     paths:
       - '.github/workflows/submind-v23-verify.yml'
+  pull_request:
+    branches:
+      - feature/submind-smart-vault-20261030
+    paths:
+      - '.github/workflows/submind-v23-verify.yml'
   workflow_dispatch:
 
 permissions:
