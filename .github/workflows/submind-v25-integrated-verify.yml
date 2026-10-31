@@ -1,5 +1,5 @@
 name: Verify SubMind Gmail 3-accounts and Brain Map AI
-# One-off rerun after strict TypeScript repairs and expiry handling.
+# Final integrated verification after expiry notices, paid safeguards and goal-based followups.
 
 on:
   pull_request:
@@ -8,6 +8,10 @@ on:
     paths:
       - '.github/workflows/submind-v25-integrated-verify.yml'
   workflow_dispatch:
+
+concurrency:
+  group: submind-v25-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
