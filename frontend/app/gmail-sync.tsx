@@ -46,7 +46,7 @@ export default function GmailSync() {
       const result=await scanConnectedGmail({days,limit:days>=730?200:120,kinds,onProgress:setProgress});
       const imported=await api.autoSyncMail(result.email,result.candidates);
       invalidate();
-      setNotice("Reviewed "+result.messages_scanned+" matching emails. "+result.rejected+" rejected as unrelated; "+imported.added+" specific candidates saved; "+imported.duplicates+" duplicates; "+imported.filtered+" failed evidence rules."
+      setNotice("Auto-organised: "+imported.accountsAdded+" accounts, "+imported.subscriptionsAdded+" subscriptions and "+imported.promosAdded+" promotions. "+imported.updated+" records updated, "+result.rejected+" unrelated emails ignored. No review required."
         +(result.limited?" Scan limit reached. Choose an older range or repeat when needed.":""));
     } catch (e:any) { Alert.alert("Gmail scan failed",e.message || String(e));setNotice("Scan incomplete. No unapproved records were automatically made active."); }
     finally { setBusy(false); }
