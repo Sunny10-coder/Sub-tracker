@@ -121,7 +121,7 @@ function futureDays(d:any):number|null{const t=isoDay(d);if(t===null)return null
  return Math.round((t-today)/86400000)}
 function dueDate(s:Dict):string|null{
  if(s.status==="Cancelled"||s.auto_renew===false)return s.access_end||s.trial_end||null;
- return s.status==="Trial"?(s.trial_end||s.renewal_date||null):(s.renewal_date||null);
+ return s.status==="Trial"?(s.trial_end||s.renewal_date||s.access_end||null):(s.renewal_date||s.access_end||s.expiry_date||null);
 }
 function charge(s:Dict):number|null{
  if(!["Active","Trial"].includes(s.status)||s.auto_renew===false||s.review_required===true)return null;
