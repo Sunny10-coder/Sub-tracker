@@ -3,209 +3,219 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TAB_BAR_SPACE } from "./_layout";
-import { useInsights, useLinks, useSubscriptions, useWatchlist } from "@/src/lib/api";
-import { money, relativeDate } from "@/src/lib/format";
-import { Card, Icon, Loading } from "@/src/components/ui";
-import { accentFor, makeStyles, useTheme } from "@/src/theme";
+import { useInbox, useInsights, useLinks, useMemory, useReminders, useWatchlist } from "@/src/lib/api";
+import { cancelByLabel, formatDate, money } from "@/src/lib/format";
+import { Icon, Loading, SectionLabel } from "@/src/components/ui";
+import { Tile, TileBig, TileLine, TileMid, useTileSize } from "@/src/components/tiles";
+import { font, makeStyles, useTheme } from "@/src/theme";
+
+const AI_PROMPTS = [
+  "When do I cancel Spotify?",
+  "Which email is my Netflix on?",
+  "What renews this month?",
+  "Do I have any promo codes?",
+];
+
+const SMALL_TILES = [
+  { icon: "eye-check", label: "plans", href: "/watchlist", key: "accentBlue" },
+  { icon: "chart-donut", label: "insights", href: "/insights", key: "accentGreen" },
+  { icon: "graph", label: "brain map", href: "/graph", key: "accentPurple" },
+  { icon: "magnify", label: "search", href: "/search", key: "accentOrange" },
+  { icon: "camera", label: "scan", href: "/scan?mode=camera", key: "accentRed" },
+  { icon: "link-variant", label: "paste link", href: "/paste-link", key: "accentPink" },
+  { icon: "email-plus-outline", label: "paste email", href: "/add-email", key: "accentYellow" },
+  { icon: "cog", label: "settings", href: "/settings", key: "accentBlue" },
+] as const;
 
 function greeting() {
   const h = new Date().getHours();
-  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  if (h < 12) return "good morning";
+  return h < 18 ? "good afternoon" : "good evening";
 }
 
-const QUICK = [
-  { icon: "camera", label: "Scan", href: "/scan?mode=camera", key: "accentRed" },
-  { icon: "link-variant", label: "Paste", href: "/paste-link", key: "accentBlue" },
-  { icon: "chat-processing", label: "Ask AI", href: "/(tabs)/ai", key: "accentPurple" },
-  { icon: "wallet-plus", label: "Add", href: "/add-subscription", key: "accentGreen" },
-];
-
-const SHORTCUTS = [
-  { icon: "bookmark-multiple", label: "Link Vault", href: "/link-vault" },
-  { icon: "eye-check", label: "Watchlist", href: "/watchlist" },
-  { icon: "bell", label: "Reminders", href: "/reminders" },
-  { icon: "chart-donut", label: "Insights", href: "/insights" },
-  { icon: "graph", label: "Brain Map", href: "/graph" },
-];
-
-export default function Home() {
+export default function Start() {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { pad, gap, square } = useTileSize();
+
   const ins = useInsights();
+  const mem = useMemory();
+  const review = useInbox("needs_review");
   const links = useLinks();
   const watch = useWatchlist();
-  const subs = useSubscriptions();
+  const rems = useReminders();
 
-  const data = ins.data;
-  const cur = data?.currency || "AED";
+  const go = (href: string) => () => router.push(href as never);
+  const refetchAll = () => { ins.refetch(); mem.refetch(); review.refetch(); links.refetch(); watch.refetch(); rems.refetch(); };
+  const refreshing = ins.isFetching || mem.isFetching;
+
+  const cur = ins.data?.currency || "AED";
+  const radar: any[] = mem.data?.cancel_radar ?? [];
+  const promos: any[] = mem.data?.promos ?? [];
+  const reviewItems: any[] = review.data ?? [];
+  const allLinks: any[] = links.data ?? [];
+  const repos = allLinks.filter((l) => l.kind === "github");
+  const upcoming = (rems.data ?? []).filter((r: any) => !r.completed).slice(0, 4);
+  const accounts: any[] = mem.data?.accounts_by_email ?? [];
+  const missing: any[] = mem.data?.missing_info ?? [];
+  const urgent = mem.data?.urgent_count ?? 0;
+
   const today = new Date();
-  const dateStr = today.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const weekday = today.toLocaleDateString(undefined, { weekday: "long" });
+  const dateStr = today.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 
-  const refreshing = ins.isFetching || links.isFetching || watch.isFetching;
-  const refetchAll = () => { ins.refetch(); links.refetch(); watch.refetch(); subs.refetch(); };
-
-  const renews = data?.renewals_30d?.length ?? 0;
-  const trials = data?.trials_ending?.length ?? 0;
+  if (ins.isLoading && !ins.data) return <View style={styles.container}><Loading /></View>;
 
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 14, paddingBottom: TAB_BAR_SPACE + insets.bottom }}
+        contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: TAB_BAR_SPACE + insets.bottom + 8 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refetchAll} tintColor={colors.brandPrimary} />}
       >
-        <View style={styles.topRow}>
-          <Text style={styles.hi}>{greeting()}</Text>
-          <View style={styles.dateBox}>
-            <View style={styles.dateDot} />
-            <Text style={styles.dateText}>{dateStr}  ·  {weekday}</Text>
+        <View style={[styles.head, { paddingHorizontal: pad + 8 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.appLabel}>SUBMIND</Text>
+            <Text style={styles.title} accessibilityRole="header">start</Text>
+            <Text style={styles.date}>{greeting()} · {dateStr}</Text>
           </View>
         </View>
-        <Text style={styles.brand}>SubMind</Text>
 
-        {ins.isLoading ? (
-          <Loading />
-        ) : (
-          <>
-            {/* Expressive dark hero card */}
-            <View style={styles.hero}>
-              <Text style={styles.heroLead}>Here is your money memory today.</Text>
-              <Text style={styles.heroBig}>
-                You are spending{" "}
-                <Text style={[styles.hl, { color: colors.accentYellow }]}>{money(data?.monthly_spend, cur)}</Text>
-                <Text style={styles.heroBig}> a month across </Text>
-                <Text style={[styles.hl, { color: colors.accentGreen }]}>{data?.active_count ?? 0} subs</Text>
-                <Text style={styles.heroBig}>. </Text>
-                <Text style={[styles.hl, { color: colors.accentOrange }]}>{renews}</Text>
-                <Text style={styles.heroBig}> renew soon and </Text>
-                <Text style={[styles.hl, { color: colors.accentPink }]}>{trials} trials</Text>
-                <Text style={styles.heroBig}> are ending.</Text>
-              </Text>
-              <View style={styles.heroChips}>
-                <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Yearly</Text><Text style={styles.heroChipValue}>{money(data?.yearly_spend, cur)}</Text></View>
-                <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Renews 30d</Text><Text style={styles.heroChipValue}>{renews}</Text></View>
-              </View>
-            </View>
+        <View style={[styles.grid, { paddingHorizontal: pad, gap }]}>
+          {/* Spend — wide live tile */}
+          <Tile
+            wide title="spending" icon="wallet" color={colors.accentBlue} onPress={go("/insights")} testID="tile-spend" delay={0}
+            hint={`${money(ins.data?.monthly_spend, cur)} a month`}
+            faces={[
+              <View key="m"><TileBig>{money(ins.data?.monthly_spend, cur)}</TileBig><TileLine>a month · {ins.data?.active_count ?? 0} active</TileLine></View>,
+              <View key="y"><TileBig>{money(ins.data?.yearly_spend, cur)}</TileBig><TileLine>a year at this pace</TileLine></View>,
+              <View key="r"><TileBig>{ins.data?.renewals_30d?.length ?? 0}</TileBig><TileLine>renewals in the next 30 days</TileLine></View>,
+            ]}
+          />
 
-            {/* Quick actions */}
-            <View style={styles.quickRow}>
-              {QUICK.map((q) => (
-                <Card key={q.label} style={[styles.quick, { backgroundColor: (colors as any)[q.key] }]} onPress={() => router.push(q.href as any)} testID={`quick-${q.label}`}>
-                  <Icon name={q.icon} size={24} color={colors.onAccent} />
-                  <Text style={styles.quickLabel}>{q.label}</Text>
-                </Card>
-              ))}
-            </View>
-
-            {/* Shortcuts */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcutRow}>
-              {SHORTCUTS.map((s) => (
-                <Card key={s.label} style={styles.shortcut} onPress={() => router.push(s.href as any)} testID={`shortcut-${s.label}`}>
-                  <Icon name={s.icon} size={18} color={colors.onSurface} />
-                  <Text style={styles.shortcutLabel}>{s.label}</Text>
-                </Card>
-              ))}
-            </ScrollView>
-
-            {/* Upcoming renewals */}
-            <Section title="Upcoming renewals" onSeeAll={() => router.push("/(tabs)/subscriptions")}>
-              {data?.renewals_30d?.length ? (
-                data.renewals_30d.slice(0, 4).map((r: any, i: number) => (
-                  <Pressable key={r.id} testID={`renew-${r.id}`} onPress={() => router.push(`/subscription/${r.id}`)} style={[styles.bubble, { backgroundColor: accentFor(colors, r.provider || i) }]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.bubbleTitle} numberOfLines={1}>{r.provider}</Text>
-                      <Text style={styles.bubbleSub}>Renews {relativeDate(r.date)}</Text>
-                    </View>
-                    <Text style={styles.bubbleAmount}>{money(r.price, r.currency || cur)}</Text>
-                    <Icon name="chevron-right" size={22} color={colors.onAccent} />
-                  </Pressable>
+          <View style={[styles.row, { gap }]}>
+            {/* Cancel radar */}
+            <Tile
+              title="cancel soon" icon="calendar-alert" color={colors.accentRed} badge={urgent} onPress={go("/memory")} testID="tile-cancel" delay={600}
+              hint={radar[0] ? `${radar[0].provider}, ${cancelByLabel(radar[0].days_left, radar[0].cancel_by)}` : "nothing to cancel"}
+              faces={radar.length
+                ? radar.slice(0, 3).map((c) => (
+                  <View key={c.id}><TileLine strong>{c.provider}</TileLine><TileBig>{c.days_left < 0 ? "!" : c.days_left}</TileBig><TileLine>{c.days_left < 0 ? "overdue" : c.days_left === 1 ? "day left to cancel" : "days left to cancel"}</TileLine></View>
                 ))
-              ) : (
-                <EmptyRow text="No renewals in the next 30 days." />
-              )}
-            </Section>
+                : [<View key="ok"><TileBig>✓</TileBig><TileLine>nothing to cancel soon</TileLine></View>]}
+            />
+            {/* Inbox */}
+            <Tile
+              title="to review" icon="inbox-arrow-down" color={colors.accentOrange} onPress={go("/(tabs)/inbox")} testID="tile-inbox" delay={1200}
+              hint={`${reviewItems.length} items need review`}
+              faces={[
+                <View key="n"><TileBig>{reviewItems.length}</TileBig><TileLine>{reviewItems.length === 1 ? "item waiting" : "items waiting"}</TileLine></View>,
+                ...reviewItems.slice(0, 2).map((i) => (
+                  <View key={i.id}><TileLine strong>{i.extraction?.provider || i.extraction?.product || "Unknown"}</TileLine><TileLine>{i.suggested_destination === "plan" ? "looks like a plan or offer" : "choose account or plan"}</TileLine></View>
+                )),
+              ]}
+            />
+          </View>
 
-            {/* Recent links */}
-            <Section title="Recent saved links" onSeeAll={() => router.push("/link-vault")}>
-              {links.data?.length ? (
-                links.data.slice(0, 3).map((l: any, i: number) => (
-                  <Card key={l.id} style={styles.linkRow} onPress={() => router.push(`/link/${l.id}`)}>
-                    <View style={[styles.linkIcon, { backgroundColor: accentFor(colors, l.title || i) }]}>
-                      <Icon name="link-variant" size={20} color={colors.onAccent} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.linkTitle} numberOfLines={1}>{l.title}</Text>
-                      <Text style={styles.linkSub} numberOfLines={1}>{l.source} · {l.category}</Text>
-                    </View>
-                  </Card>
-                ))
-              ) : (
-                <EmptyRow text="Share a link to SubMind to start your vault." />
-              )}
-            </Section>
-          </>
-        )}
+          {/* Ask AI — wide, always visible */}
+          <Tile
+            wide title="ask ai" icon="robot-happy" color={colors.accentPink} onPress={go("/(tabs)/ai")} testID="tile-ai" delay={300}
+            hint="Ask about your subscriptions"
+            faces={AI_PROMPTS.map((p, i) => (
+              <View key={p}><TileLine strong>{i === 0 ? "ask me anything" : "try asking"}</TileLine><TileMid>{p}</TileMid></View>
+            ))}
+          />
+
+          <View style={[styles.row, { gap }]}>
+            <Tile
+              title="my memory" icon="head-snowflake-outline" color={colors.accentPurple} onPress={go("/memory")} testID="tile-memory" delay={900}
+              faces={[
+                <View key="a"><TileBig>{accounts.filter((a) => a.email !== "unknown").length}</TileBig><TileLine>mail ids with subscriptions</TileLine></View>,
+                <View key="m"><TileBig>{missing.length}</TileBig><TileLine>{missing.length === 1 ? "subscription is" : "subscriptions are"} missing a detail</TileLine></View>,
+              ]}
+            />
+            <Tile
+              title="saved links" icon="bookmark-multiple" color={colors.accentGreen} onPress={go("/link-vault")} testID="tile-links" delay={1500}
+              faces={[
+                <View key="n"><TileBig>{allLinks.length}</TileBig><TileLine>links you will not forget</TileLine></View>,
+                ...allLinks.slice(0, 2).map((l) => <View key={l.id}><TileLine strong>{l.title}</TileLine><TileLine>{l.collection || l.source}</TileLine></View>),
+              ]}
+            />
+          </View>
+
+          <View style={[styles.row, { gap }]}>
+            <Tile
+              title="github" icon="github" color={colors.accentYellow} onPress={go("/link-vault?kind=github")} testID="tile-github" delay={700}
+              faces={[
+                <View key="n"><TileBig>{repos.length}</TileBig><TileLine>repos saved</TileLine></View>,
+                ...repos.slice(0, 2).map((l) => <View key={l.id}><TileLine strong>{l.title}</TileLine><TileLine>{(l.use_cases || [])[0] || l.summary}</TileLine></View>),
+              ]}
+            />
+            <Tile
+              title="promo codes" icon="ticket-percent-outline" color={colors.accentBlue} onPress={go("/memory?tab=promos")} testID="tile-promos" delay={1800}
+              faces={promos.length
+                ? [
+                  <View key="n"><TileBig>{promos.length}</TileBig><TileLine>codes to use</TileLine></View>,
+                  ...promos.slice(0, 2).map((p) => <View key={p.code}><TileLine strong>{p.provider}</TileLine><TileLine>{p.code}{p.days_left !== null ? ` · ${p.days_left}d left` : ""}</TileLine></View>),
+                ]
+                : [<View key="e"><TileBig>0</TileBig><TileLine>no active promo codes</TileLine></View>]}
+            />
+          </View>
+
+          <Tile
+            wide title="reminders" icon="bell-ring-outline" color={colors.accentOrange} onPress={go("/reminders")} testID="tile-reminders" delay={400} height={square * 0.62}
+            faces={upcoming.length
+              ? upcoming.map((r: any) => <View key={r.id}><TileLine strong>{formatDate(r.due_date)}</TileLine><TileLine>{r.title}</TileLine></View>)
+              : [<View key="e"><TileLine strong>no reminders</TileLine><TileLine>tap to add one</TileLine></View>]}
+          />
+
+          {/* Quarter-size shortcuts */}
+          <View style={[styles.smallWrap, { gap }]}>
+            {SMALL_TILES.map((t) => (
+              <Tile key={t.label} small title={t.label} icon={t.icon} color={(colors as any)[t.key]} onPress={go(t.href)} testID={`small-${t.label}`} />
+            ))}
+          </View>
+        </View>
+
+        {/* Dashboard strip: the next things to act on */}
+        <View style={[styles.section, { paddingHorizontal: pad + 8 }]}>
+          <SectionLabel right={<Text style={styles.link} onPress={go("/memory")} accessibilityRole="link">see all</Text>}>{"don't miss"}</SectionLabel>
+          {radar.length === 0 ? (
+            <Text style={styles.muted}>Nothing is due. When you add a subscription, SubMind tells you when and where to cancel and which mail id it is on.</Text>
+          ) : (
+            radar.slice(0, 3).map((c) => (
+              <Pressable key={c.id} onPress={go(`/subscription/${c.id}`)} style={styles.row2} testID={`dm-${c.id}`}>
+                <View style={[styles.bar, { backgroundColor: c.urgency === "later" ? colors.accentBlue : c.urgency === "soon" ? colors.accentOrange : colors.accentRed }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>{c.provider} · {cancelByLabel(c.days_left, c.cancel_by)}</Text>
+                  <Text style={styles.rowSub} selectable>{money(c.price, c.currency || cur)} {c.is_trial ? "after trial" : "next charge"} · {c.account_email || "mail id not saved"}</Text>
+                  <Text style={styles.rowSub} numberOfLines={1}>{c.where.url ? c.where.url.replace(/^https?:\/\//, "") : c.where.steps}</Text>
+                </View>
+                <Icon name="chevron-right" size={20} color={colors.muted} />
+              </Pressable>
+            ))
+          )}
+        </View>
       </ScrollView>
-    </View>
-  );
-}
-
-// Lightweight helpers for the home sections.
-function EmptyRow({ text }: { text: string }) {
-  const styles = useStyles();
-  return <Card><Text style={styles.muted}>{text}</Text></Card>;
-}
-
-function Section({ title, children, onSeeAll }: any) {
-  const styles = useStyles();
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHead}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {onSeeAll ? <Text style={styles.seeAll} onPress={onSeeAll}>See all</Text> : null}
-      </View>
-      <View style={{ gap: 10 }}>{children}</View>
     </View>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
-  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22 },
-  hi: { color: colors.muted, fontSize: 15, fontWeight: "700" },
-  dateBox: { flexDirection: "row", alignItems: "center", gap: 6 },
-  dateDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accentOrange },
-  dateText: { color: colors.onSurfaceTertiary, fontSize: 13, fontWeight: "700" },
-  brand: { color: colors.onSurface, fontSize: 40, fontWeight: "800", letterSpacing: -1.2, paddingHorizontal: 22, marginTop: 2 },
-  hero: { backgroundColor: colors.surfaceInverse, marginHorizontal: 18, marginTop: 16, borderRadius: 30, padding: 24 },
-  heroLead: { color: "#FFFFFF99", fontSize: 14, fontWeight: "700", marginBottom: 10 },
-  heroBig: { color: colors.onSurfaceInverse, fontSize: 25, fontWeight: "800", lineHeight: 34, letterSpacing: -0.5 },
-  hl: { fontSize: 25, fontWeight: "800", lineHeight: 34, letterSpacing: -0.5 },
-  heroChips: { flexDirection: "row", gap: 10, marginTop: 20 },
-  heroChip: { backgroundColor: "#FFFFFF14", borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10, flex: 1 },
-  heroChipLabel: { color: "#FFFFFF99", fontSize: 12, fontWeight: "700" },
-  heroChipValue: { color: "#FFFFFF", fontSize: 18, fontWeight: "800", marginTop: 2 },
-  quickRow: { flexDirection: "row", gap: 10, paddingHorizontal: 18, marginTop: 18 },
-  quick: { flex: 1, alignItems: "center", gap: 8, paddingVertical: 16, paddingHorizontal: 4, borderWidth: 0, borderRadius: 22 },
-  quickLabel: { color: colors.onAccent, fontSize: 12, fontWeight: "800" },
-  shortcutRow: { gap: 10, paddingHorizontal: 18, marginTop: 16 },
-  shortcut: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 999 },
-  shortcutLabel: { color: colors.onSurfaceSecondary, fontSize: 13, fontWeight: "700" },
-  section: { marginTop: 26, paddingHorizontal: 18 },
-  sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  sectionTitle: { color: colors.onSurface, fontSize: 20, fontWeight: "800", letterSpacing: -0.4 },
-  seeAll: { color: colors.brandPrimary, fontSize: 14, fontWeight: "800" },
-  bubble: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 22, paddingHorizontal: 18, paddingVertical: 16 },
-  bubbleTitle: { color: colors.onAccent, fontSize: 16, fontWeight: "800" },
-  bubbleSub: { color: colors.onAccent, opacity: 0.75, fontSize: 13, marginTop: 2, fontWeight: "600" },
-  bubbleAmount: { color: colors.onAccent, fontSize: 16, fontWeight: "800" },
-  bubblePress: { ...{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 } },
-  linkRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  linkIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  linkTitle: { color: colors.onSurfaceSecondary, fontSize: 15, fontWeight: "700" },
-  linkSub: { color: colors.muted, fontSize: 13, marginTop: 2 },
-  muted: { color: colors.muted, fontSize: 14 },
+  head: { flexDirection: "row", alignItems: "flex-end", paddingBottom: 14 },
+  appLabel: { color: colors.muted, fontSize: 12, fontWeight: "700", letterSpacing: 2.5 },
+  title: { ...font.thin, color: colors.onSurface, fontSize: 64, lineHeight: 70, letterSpacing: -1 },
+  date: { color: colors.muted, fontSize: 14, marginTop: 2 },
+  grid: { flexDirection: "column" },
+  row: { flexDirection: "row" },
+  smallWrap: { flexDirection: "row", flexWrap: "wrap" },
+  section: { marginTop: 28 },
+  link: { color: colors.brandPrimary, fontSize: 15, fontWeight: "600" },
+  muted: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  row2: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surfaceSecondary, marginBottom: 6, paddingRight: 12 },
+  bar: { width: 6, alignSelf: "stretch" },
+  rowTitle: { color: colors.onSurface, fontSize: 16, fontWeight: "600", paddingTop: 10 },
+  rowSub: { color: colors.muted, fontSize: 13, marginTop: 2 },
 }));

@@ -80,9 +80,9 @@ export default function Onboarding() {
 
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface, paddingHorizontal: 24 },
-  hero: { flex: 1, borderRadius: 32, alignItems: "center", justifyContent: "center", marginTop: 8, gap: 16 },
+  hero: { flex: 1, borderRadius: 0, alignItems: "center", justifyContent: "center", marginTop: 8, gap: 16 },
   heroInner: {
-    width: 150, height: 150, borderRadius: 44, backgroundColor: "#FFFFFF22",
+    width: 150, height: 150, borderRadius: 0, backgroundColor: "#FFFFFF22",
     alignItems: "center", justifyContent: "center",
   },
   brand: { color: colors.onBrandPrimary, fontSize: 30, fontWeight: "800", letterSpacing: -0.5 },

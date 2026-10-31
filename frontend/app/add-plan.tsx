@@ -16,7 +16,7 @@ export default function AddPlan() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const invalidate = useInvalidateAll();
-  const [f, setF] = useState<any>({ provider: "", plan: "", price: "", currency: "AED", billing_cycle: "monthly", url: "", offer_expiry: "", notes: "" });
+  const [f, setF] = useState<any>({ provider: "", plan: "", price: "", currency: "AED", billing_cycle: "monthly", url: "", offer_expiry: "", notes: "", promo_code: "", discount: "" });
   const set = (k: string) => (v: any) => setF((s: any) => ({ ...s, [k]: v }));
 
   const save = useMutation({
@@ -35,6 +35,8 @@ export default function AddPlan() {
         <SelectField label="Billing cycle" options={CYCLES} value={f.billing_cycle} onChange={set("billing_cycle")} testID="plan-cycle" />
         <TextField label="URL (optional)" value={f.url} onChangeText={set("url")} placeholder="https://…" testID="plan-url" />
         <TextField label="Offer expiry (optional)" value={f.offer_expiry} onChangeText={set("offer_expiry")} placeholder="YYYY-MM-DD" testID="plan-offer" />
+        <TextField label="Promo code (optional)" value={f.promo_code} onChangeText={set("promo_code")} placeholder="SAVE20" testID="plan-promo" />
+        <TextField label="Offer (optional)" value={f.discount} onChangeText={set("discount")} placeholder="50% off for 3 months" testID="plan-discount" />
         <TextField label="Notes" value={f.notes} onChangeText={set("notes")} placeholder="Why watch this?" multiline testID="plan-notes" />
       </FormScroll>
       <KeyboardStickyView>

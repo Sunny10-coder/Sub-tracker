@@ -58,8 +58,8 @@ export default function Reminders() {
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  check: { width: 26, height: 26, borderRadius: 8, borderWidth: 2, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
-  iconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandPrimary + "16", alignItems: "center", justifyContent: "center" },
+  check: { width: 26, height: 26, borderRadius: 0, borderWidth: 2, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  iconBox: { width: 40, height: 40, borderRadius: 0, backgroundColor: colors.brandPrimary + "16", alignItems: "center", justifyContent: "center" },
   title: { color: colors.onSurfaceSecondary, fontSize: 15, fontWeight: "700" },
   done: { textDecorationLine: "line-through", color: colors.muted },
   date: { color: colors.muted, fontSize: 13, marginTop: 3, fontWeight: "600" },

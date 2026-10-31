@@ -112,7 +112,7 @@ export default function Graph() {
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
   hint: { color: colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 12 },
-  selBar: { marginHorizontal: 16, marginVertical: 10, borderRadius: 16, padding: 14 },
+  selBar: { marginHorizontal: 16, marginVertical: 10, borderRadius: 0, padding: 14 },
   selType: { color: colors.muted, fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
   selLabel: { color: colors.onSurface, fontSize: 18, fontWeight: "800", marginTop: 2 },
   legend: { flexDirection: "row", flexWrap: "wrap", gap: 14, justifyContent: "center", paddingHorizontal: 20, marginTop: 10 },

@@ -83,12 +83,12 @@ export default function Watchlist() {
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
   top: { flexDirection: "row", alignItems: "center", gap: 12 },
-  dot: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  dot: { width: 44, height: 44, borderRadius: 0, alignItems: "center", justifyContent: "center" },
   name: { color: colors.onSurfaceSecondary, fontSize: 16, fontWeight: "800" },
   plan: { color: colors.muted, fontSize: 13, marginTop: 2 },
   price: { color: colors.onSurface, fontSize: 16, fontWeight: "800" },
   actions: { flexDirection: "row", gap: 8, marginTop: 14 },
-  act: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.surfaceTertiary, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9 },
+  act: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.surfaceTertiary, borderRadius: 0, paddingHorizontal: 12, paddingVertical: 9 },
   actText: { fontSize: 13, fontWeight: "700", color: colors.onSurfaceTertiary },
   floating: { position: "absolute", left: 20, right: 20 },
 }));

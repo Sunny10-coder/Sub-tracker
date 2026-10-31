@@ -1,6 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import * as Notifications from "expo-notifications";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
@@ -22,21 +21,6 @@ const PRESETS = [
   { label: "Before expiry (3d)", days: 3 },
 ];
 
-async function scheduleLocal(title: string, date: string) {
-  try {
-    const perm = await Notifications.getPermissionsAsync();
-    let granted = perm.granted;
-    if (!granted && perm.canAskAgain) granted = (await Notifications.requestPermissionsAsync()).granted;
-    if (!granted) return;
-    const when = new Date(date + "T09:00:00");
-    if (when.getTime() <= Date.now()) return;
-    await Notifications.scheduleNotificationAsync({
-      content: { title: "SubMind reminder", body: title },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when } as any,
-    });
-  } catch {}
-}
-
 export default function AddReminder() {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -51,7 +35,7 @@ export default function AddReminder() {
 
   const save = useMutation({
     mutationFn: async () => {
-      await scheduleLocal(title, date);
+      // The notification itself is scheduled by the app-wide reminder sync once this is saved.
       return api.createReminder({ title, due_date: date, kind: "custom" });
     },
     onSuccess: () => { invalidate(); router.replace("/reminders"); },
@@ -85,7 +69,7 @@ const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
   label: { color: colors.onSurfaceTertiary, fontSize: 13, fontWeight: "800", marginLeft: 4 },
   presets: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  preset: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 10 },
+  preset: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: 0, paddingHorizontal: 16, paddingVertical: 10 },
   presetText: { color: colors.onSurfaceSecondary, fontSize: 14, fontWeight: "700" },
   bar: { paddingHorizontal: 20, paddingTop: 12, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
 }));

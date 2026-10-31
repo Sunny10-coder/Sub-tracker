@@ -55,11 +55,11 @@ export function SelectField({ label, options, value, onChange, testID }: any) {
 
 const useStyles = makeStyles((colors) => ({
   field: { gap: 8 },
-  label: { color: colors.onSurfaceTertiary, fontSize: 13, fontWeight: "800", marginLeft: 4 },
+  label: { color: colors.onSurfaceTertiary, fontSize: 13, fontWeight: "600", marginLeft: 2 },
   input: {
     backgroundColor: colors.surfaceSecondary,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 0,
+    borderWidth: 2,
     borderColor: colors.border,
     paddingHorizontal: 16,
     paddingVertical: 14,

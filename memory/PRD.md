@@ -54,3 +54,15 @@ The original spec targeted native Android (Kotlin/Jetpack Compose) + Cloudflare 
 ## Next Tasks
 - Wire Jina/Firecrawl once keys provided; add watchlist price-change events + notifications.
 - Add full edit-subscription flow and merge-into-existing UI for duplicates.
+
+
+## Update 2026-10-31 — exact email parsing, personal memory, link intelligence, Lumia theme
+- **Email accuracy:** `backend/parsing.py` reads emails/text deterministically (promo codes, prices vs discounts, dates by event kind, mail id, cancel URL) and the AI output is merged with it and *verified against the source text* — an AI price/code/mail id that is not in the text is dropped. Unsure items carry `doubts` and a `suggested_destination`.
+- **Review → account or plan:** Inbox cards and `/review/[id]` offer Add as account / Add as plan / Save as link / Edit / Re-scan / Ignore. A "cancelled" email merges into the existing subscription.
+- **Paste link:** auto-detects GitHub repo, Instagram, YouTube, web; tags, note, reminder presets; GitHub repos get stats + small use cases and live in a GitHub section of the Link Vault. Instagram analysis is caption/hashtag based (the video itself is not watched) and the app says so.
+- **My memory:** `/memory/dashboard` + `app/memory.tsx` — when to cancel (cancel-by = charge date − notice days), where to cancel (email link → built-in directory → generic), which mail id, promo codes, links not to forget. The AI chat is grounded on the same data.
+- **Reminders:** server reminders are mirrored to local notifications at 09:00 (`src/lib/notify.ts`).
+- **Theme:** Nokia Lumia / Windows Phone — black/white canvas, flat square tiles, light type, live flip tiles on Start (`src/components/tiles.tsx`), app-bar style tab bar with an always-visible Ask AI button.
+- **Server URL:** configurable in Settings → Server (stored on device) so one APK works with any backend.
+- **APK:** `.github/workflows/build-apk.yml` builds a debug-signed release APK on GitHub Actions (artifact + pre-release).
+- **Tests:** `backend/tests/test_parsing.py`, `backend/tests/test_server_offline.py` (offline, no network/LLM/Mongo).

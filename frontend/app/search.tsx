@@ -71,7 +71,7 @@ export default function Search() {
 
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
-  searchWrap: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 20, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12 },
+  searchWrap: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 20, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: 0, paddingHorizontal: 14, paddingVertical: 12 },
   search: { flex: 1, color: colors.onSurface, fontSize: 16 },
   none: { color: colors.muted, fontSize: 15, textAlign: "center", paddingVertical: 20 },
   groupHead: { flexDirection: "row", alignItems: "center", gap: 8 },
