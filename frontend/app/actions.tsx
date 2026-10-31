@@ -16,6 +16,13 @@ const ACTIONS = [
   { icon: "bell-plus", label: "Add reminder", color: "accentYellow", href: "/add-reminder" },
   { icon: "note-plus", label: "Add note", color: "accentBlue", href: "/add-note" },
   { icon: "robot-happy", label: "Ask AI", color: "accentPink", href: "/(tabs)/ai" },
+  { icon: "gmail", label: "Gmail Sync", color: "accentBlue", href: "/gmail-sync" },
+  { icon: "brain", label: "Tool Brain", color: "accentPurple", href: "/tool-brain" },
+  { icon: "key-variant", label: "AI Models", color: "accentGreen", href: "/api-keys" },
+  { icon: "file-import", label: "Load Vault", color: "accentOrange", href: "/import-data" },
+  { icon: "tag-multiple", label: "Promo Vault", color: "accentYellow", href: "/promo-vault" },
+  { icon: "text-box-multiple", label: "Prompts", color: "accentPink", href: "/prompt-vault" },
+  { icon: "database-export", label: "Backup", color: "accentBlue", href: "/export-data" },
 ] as const;
 
 export default function Actions() {
