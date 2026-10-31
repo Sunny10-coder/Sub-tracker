@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -9,10 +9,11 @@ import { api, useInvalidateAll } from "@/src/lib/api";
 import { CATEGORIES, CURRENCIES, CYCLES, STATUSES } from "@/src/lib/format";
 import { AppHeader, PrimaryButton } from "@/src/components/ui";
 import { FormScroll, SelectField, TextField } from "@/src/components/form";
-import { makeStyles } from "@/src/theme";
+import { makeStyles, useTheme } from "@/src/theme";
 
 export default function AddSubscription() {
   const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const invalidate = useInvalidateAll();
@@ -53,6 +54,7 @@ export default function AddSubscription() {
       <KeyboardStickyView>
         <View style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
           <PrimaryButton title="Save subscription" icon="check" onPress={() => save.mutate()} loading={save.isPending} disabled={!f.provider} testID="save-subscription" />
+          {save.isError ? <Text style={{color:colors.error,fontSize:12,marginTop:7}}>{(save.error as Error)?.message||"Unable to save"}</Text> : null}
         </View>
       </KeyboardStickyView>
     </View>
