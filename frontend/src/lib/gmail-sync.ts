@@ -169,17 +169,22 @@ export async function scanConnectedGmail(options:{
   if(!queries.length)throw Error("Select at least one category.");
   const seen=new Map<string,{id:string}>();
   let limited=false;
+  // Reserve query capacity per category so newsletters or receipt volume
+  // cannot prevent account or promo matches from ever being inspected.
+  const perCategory=Math.max(10,Math.floor(limit/queries.length));
   for(const {q} of queries){
-    let pageToken:string|undefined;
+    let pageToken:string|undefined,categoryChecked=0;
     do{
-      if(seen.size>=limit){limited=true;break;}
+      if(categoryChecked>=perCategory){limited=true;break;}
       const response=await gmailRequest(urlQuery("/messages",{
-        q,maxResults:Math.min(100,limit-seen.size),...(pageToken?{pageToken}:{})
+        q,maxResults:Math.min(100,perCategory-categoryChecked),...(pageToken?{pageToken}:{})
       }));
-      for(const msg of response.messages||[])if(msg.id&&!seen.has(msg.id))seen.set(msg.id,msg);
+      const messages=response.messages||[];
+      categoryChecked+=messages.length;
+      for(const msg of messages)if(msg.id&&!seen.has(msg.id))seen.set(msg.id,msg);
       pageToken=response.nextPageToken;
-      if(pageToken&&seen.size>=limit)limited=true;
-    }while(pageToken&&seen.size<limit);
+      if(pageToken&&categoryChecked>=perCategory)limited=true;
+    }while(pageToken&&categoryChecked<perCategory);
   }
   const candidates:MailCandidate[]=[];
   let scanned=0,rejected=0;
