@@ -97,11 +97,22 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
   const added:Dict={},duplicates:Dict={};
   for(const k of Object.keys(inbound)){
     const existing:Dict[]=(vault as any)[k]||[];const array=inbound[k];
-    const logical=(x:Dict)=>k==="subscriptions"?[
-      normalized(x.provider),normalized(x.plan||x.product),lower(x.account_email)].join("|"):
-      k==="accounts"?[normalized(x.provider),lower(x.email)].join("|"):
-      k==="promo_codes"?[normalized(x.provider),normalized(x.code),lower(x.account_email)].join("|"):
-      String(x.id);
+    const logical=(x:Dict)=>{
+      const id=String(x.id||"");
+      const mailbox=lower(x.account_email||x.mailbox_email||x.email).trim();
+      const provider=normalized(x.provider);
+      if(k==="subscriptions"){
+        // Do not collapse two independent subscriptions when their account
+        // identity is unknown. Workbook IDs make repeated imports idempotent.
+        return mailbox?[provider,normalized(x.plan||x.product),mailbox].join("|"):"id:"+id;
+      }
+      if(k==="accounts")return mailbox?[provider,mailbox].join("|"):"id:"+id;
+      if(k==="promo_codes"){
+        const code=normalized(x.code);
+        return code?[provider,code,mailbox].join("|"):"id:"+id;
+      }
+      return "id:"+id;
+    };
     const index=new Map<string,Dict>();
     for(const row of existing)index.set(logical(row),row);
     let newCount=0,mergedCount=0;
@@ -157,8 +168,8 @@ export function localInsights(v:Vault):Dict{
  const monthly:Record<string,number>={};const cats:Record<string,number>={};const catNames:Record<string,string[]>={};
  const upcoming:Dict[]=[];const trials:Dict[]=[];
  for(const s of active){
-  const cost=charge(s);const cur=String(s.currency||"AED").toUpperCase();
-  if(cost!==null){monthly[cur]=(monthly[cur]||0)+cost;const c=String(s.category||"Other");
+  const cost=charge(s);const cur=String(s.currency||"").toUpperCase();
+  if(cost!==null&&cur){monthly[cur]=(monthly[cur]||0)+cost;const c=String(s.category||"Other");
    const name=cur+" / "+c;cats[name]=(cats[name]||0)+cost;(catNames[name]??=[]).push(s.provider);}
   const delta=futureDays(dueDate(s));
   if(delta!==null&&delta>=0&&delta<=30){
