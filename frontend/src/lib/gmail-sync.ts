@@ -85,7 +85,7 @@ export async function selectRegisteredMailbox(email:string):Promise<string|null>
   configure(target);
   try{
     const result=await GoogleSignin.signInSilently();
-    if(!isSuccessResponse(result)||normal(result.data.user.email)!==target)return null;
+    if(result.type!=="success"||normal(result.data.user.email)!==target)return null;
     activeGoogleAccount=target;
     const response=await gmailRequest("/profile");
     if(normal(response.emailAddress)!==target)return null;
