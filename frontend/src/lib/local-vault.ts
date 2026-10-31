@@ -7,14 +7,15 @@ import { classifyLink, canonicalUrl, graphFromVault, inferCategory, inferTags } 
 import { MIN_CONFIDENCE, CLASSIFIER_VERSION, classifyMail } from "@/src/lib/gmail-classifier";
 import { applyMailCandidate } from "@/src/lib/mail-reconciliation";
 import type { MailCandidate } from "@/src/lib/gmail-classifier";
+import { fetchGitHubSnapshot, repoUpdates, buildFollowUpSuggestions } from "@/src/lib/smart-companion";
 
 export const LOCAL_VAULT_KEY = "submind.private.import.v1";
 type Dict = Record<string, any>;
 type Vault = { schema: string; subscriptions: Dict[]; accounts: Dict[]; watchlist: Dict[];
   promo_codes: Dict[]; mail_activity: Dict[]; review_queue: Dict[]; prompts: Dict[]; mailboxes: Dict[]; promo_sources: Dict[]; promo_findings: Dict[];
-  benefits: Dict[]; links: Dict[]; reminders: Dict[]; price_snapshots: Dict[]; settings: Dict; imported_at?: string };
+  benefits: Dict[]; links: Dict[]; reminders: Dict[]; price_snapshots: Dict[]; smart_tasks: Dict[]; settings: Dict; imported_at?: string };
 const EMPTY:Vault={schema:"submind-import-v1",subscriptions:[],accounts:[],watchlist:[],
- promo_codes:[],mail_activity:[],review_queue:[],prompts:[],mailboxes:[],promo_sources:[],promo_findings:[],benefits:[],links:[],reminders:[],price_snapshots:[],
+ promo_codes:[],mail_activity:[],review_queue:[],prompts:[],mailboxes:[],promo_sources:[],promo_findings:[],benefits:[],links:[],reminders:[],price_snapshots:[],smart_tasks:[],
  settings:{currency:"AED",ai_enabled:true,price_monitoring:false,auto_add_threshold:0.95}};
 
 function lower(s:any):string{return String(s||"").toLowerCase()}
@@ -23,7 +24,7 @@ function string(s:any):string{return typeof s==="string"?s.trim():""}
 function asArray(x:any):Dict[]{return Array.isArray(x)?x.filter(v=>v&&typeof v==="object"):[]}
 function copy(v:Vault):Vault{
  const merged={...EMPTY,...v,settings:{...EMPTY.settings,...v.settings}};
- for(const k of ["subscriptions","accounts","watchlist","promo_codes","mail_activity","review_queue","prompts","mailboxes","promo_sources","promo_findings","benefits","links","reminders","price_snapshots"] as const) {
+ for(const k of ["subscriptions","accounts","watchlist","promo_codes","mail_activity","review_queue","prompts","mailboxes","promo_sources","promo_findings","benefits","links","reminders","price_snapshots","smart_tasks"] as const) {
   (merged as any)[k]=asArray((v as any)[k]);
  }
  return merged;
@@ -521,6 +522,25 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
         result={duplicate:false,item:rec};}
    }else if(route.startsWith("/promo/findings/")&&method==="DELETE"){
       v.promo_findings=v.promo_findings.filter(x=>x.id!==route.split("/")[3]);result={ok:true};
+   }else if(route==="/smart/tasks"&&method==="POST"){
+      const sourceKey=string(data.source_key)||"manual:"+uid();
+      const existing=v.smart_tasks.find(x=>x.source_key===sourceKey);
+      if(existing)result=existing;
+      else{const rec={id:"task-"+uid(),source_key:sourceKey,title:string(data.title).slice(0,180),
+        description:string(data.description).slice(0,1200),kind:string(data.kind)||"manual",
+        source_id:string(data.source_id),source_type:string(data.source_type)||"manual",
+        due_date:data.due_date||null,status:"open",created_at:nowIso()};
+        if(!rec.title)throw Error("Task title required");
+        v.smart_tasks.unshift(rec);result=rec;}
+   }else if(route.startsWith("/smart/tasks/")&&method==="PATCH"){
+      const item=v.smart_tasks.find(x=>x.id===route.split("/")[3]);if(!item)notFound();
+      if(!["open","done","dismissed"].includes(string(data.status)))throw Error("Invalid task status");
+      Object.assign(item,{status:data.status,updated_at:nowIso()});result=item;
+   }else if(route.startsWith("/smart/links/")&&route.endsWith("/watch")&&method==="POST"){
+      const id=route.split("/")[3],link=v.links.find(x=>x.id===id);
+      if(!link||link.kind!=="github")throw Error("Select a saved public GitHub repository.");
+      link.repo_watch_enabled=data.enabled===true;
+      result=link;
    }else if(route==="/settings"&&method==="PATCH"){
       v.settings={...v.settings,...data};result=v.settings;
    }else if(route==="/links"&&method==="POST"){
@@ -648,6 +668,8 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  else if(route.startsWith("/links/")&&route.endsWith("/reminder"))result=v.reminders.find(r=>r.ref_type==="link"&&r.ref_id===route.split("/")[2]&&!r.completed)||null;
  else if(route.startsWith("/links/"))result=v.links.find(x=>x.id===route.split("/")[2])||notFound();
  else if(route==="/reminders")result=v.reminders;
+ else if(route==="/smart/tasks")result=v.smart_tasks;
+ else if(route==="/smart/suggestions")result=buildFollowUpSuggestions(v);
  else if(route==="/settings")result=v.settings;
  else if(route==="/inbox"){
     const tab=lower(params.get("tab")||"needs_review");

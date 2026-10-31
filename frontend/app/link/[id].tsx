@@ -35,6 +35,7 @@ export default function LinkDetail() {
   const analysis=useMutation({mutationFn:()=>api.analyzeLink(id!),onSuccess:refresh});
   const del = useMutation({ mutationFn: () => api.deleteLink(id!), onSuccess: () => { invalidate(); router.back(); } });
   const patch = useMutation({ mutationFn: (b: Record<string, unknown>) => api.updateLink(id!, b), onSuccess: refresh });
+  const watch=useMutation({mutationFn:(enabled:boolean)=>api.smartWatchRepo(id!,enabled),onSuccess:refresh});
   const remind = useMutation({
     mutationFn: (days: number) => api.linkRemind(id!, { days }),
     onSuccess: refresh,
@@ -144,6 +145,11 @@ export default function LinkDetail() {
             onPress={()=>router.push(("/link/"+item.id) as never)}>{item.title||item.url}</Text>)}
         </Card>:null}
         <View style={{ gap: 8 }}>
+          {kind==="github"?<PrimaryButton title={l.repo_watch_enabled?"Stop GitHub release watch":"Watch GitHub releases"}
+            icon="eye-outline" variant="secondary" loading={watch.isPending}
+            onPress={()=>watch.mutate(!l.repo_watch_enabled)}/>:null}
+          <PrimaryButton title="Explore Smart Companion" icon="brain"
+            variant="secondary" onPress={()=>router.push("/smart-companion")}/>
           <PrimaryButton title="Re-analyze content and tags" icon="auto-fix" variant="secondary"
             loading={analysis.isPending} onPress={()=>analysis.mutate()} testID="reanalyze-link" />
           {analysis.isError?<Text style={styles.fine}>{(analysis.error as Error).message}</Text>:null}
