@@ -130,7 +130,7 @@ function charge(s:Dict):number|null{
  if(s.price===null||s.price===undefined||!Number.isFinite(Number(s.price)))return null;
  const cost=Number(s.price);if(cost<0)return null;
  switch(String(s.billing_cycle||"").toLowerCase()){
-  case "monthly":return cost;case "yearly":return cost/12;case "weekly":return cost*52/12;default:return null;
+  case "monthly":return cost;case "yearly":return cost/12;case "weekly":return cost*52/12;case "daily":return cost*365/12;default:return null;
  }
 }
 export function localInsights(v:Vault):Dict{
