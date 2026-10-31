@@ -53,12 +53,12 @@ export default function BrainMap(){
    if(result.results.length)setSelectedId(result.results[0].cluster);
  };
  const openTool=(tool:Tool)=>{
-   if(tool.kind.includes("prompt")||tool.kind.includes("idea"))router.push("/(tabs)/prompts");
+   if(tool.kind.includes("prompt")||tool.kind.includes("idea"))router.push("/prompt-vault");
    else if(tool.kind==="link")router.push("/link-vault");
    else if(tool.kind.includes("subscription"))router.push("/(tabs)/subscriptions");
    else if(tool.kind.includes("promo")||tool.kind.includes("offer"))router.push("/promo-vault");
-   else if(tool.kind.includes("account"))router.push("/(tabs)/account-hub");
-   else router.push("/(tabs)/vault");
+   else if(tool.kind.includes("account"))router.push("/accounts");
+   else router.push("/restored-tools");
  };
  const visibleSize=SIZE*zoom;
  return <View style={{flex:1,backgroundColor:METRO.black}}>
