@@ -29,5 +29,6 @@ jobs:
           node-version: '22'
       - run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - run: yarn install --non-interactive --no-lockfile
+      - run: node --experimental-strip-types tests/gmail-classifier.test.mjs
       - run: npx tsc --noEmit --pretty false
       - run: npx expo export --platform android --output-dir .submind-ci-dist
