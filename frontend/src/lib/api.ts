@@ -141,7 +141,7 @@ export const api = {
     const record=await localRequest<any>("/accounts/"+encodeURIComponent(id));
     const plans=await api.subscriptions().catch(()=>[]);
     const same=(x:any)=>String(x.provider||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-    return {...record,plans:plans.filter((x:any)=>same(x)===same(record)&&
+    return {...record,plans:plans.filter((x:any)=>Boolean(String(record.email||"").trim())&&same(x)===same(record)&&
       String(x.account_email||"").toLowerCase()===String(record.email||"").toLowerCase())
       .map((x:any)=>({id:x.id,plan:x.plan,status:x.status}))};
   },
