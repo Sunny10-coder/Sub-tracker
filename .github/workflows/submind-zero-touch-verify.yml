@@ -1,5 +1,5 @@
 name: Verify zero-touch Gmail SubMind
-# One-off PR validation after stronger recurring-billing footer rejection
+# One-off PR validation after zero-touch automatic launch integration
 
 on:
   pull_request:
