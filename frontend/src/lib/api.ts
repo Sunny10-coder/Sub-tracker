@@ -85,7 +85,7 @@ async function req<T>(path:string,opts?:RequestInit):Promise<T>{
        links:vault.links.slice(0,80),promos:vault.promo_codes.slice(0,80),watchlist:vault.watchlist.slice(0,60)}).slice(0,22000);
     const p=await storage.getItem("submind.ai.selected-provider","gemini");
     const provider=p==="groq"||p==="nvidia"?p:"gemini";
-    const model=String(await storage.getItem("submind.ai.selected-model."+provider,"")||"");
+    const model=p==="auto"?"":String(await storage.getItem("submind.ai.selected-model."+provider,"")||"");
     return await direct.chat(question,context,provider,model||undefined) as T;
   }
   if(route==="/ai/chat/history"&&!serverUrl)return [] as T;
@@ -172,7 +172,17 @@ export const api = {
     return req<any[]>(`/subscriptions?${p.toString()}`);
   },
   subscription: (id: string) => req<any>(`/subscriptions/${id}`),
-  createSubscription: (b: any) => req<any>("/subscriptions", { method: "POST", body: JSON.stringify(b) }),
+  createSubscription: async (b:any) => {
+    const provider=String(b.provider||"").trim().toLowerCase();
+    if(!provider)throw Error("Provider is required.");
+    const norm=(x:any)=>String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+    const existing=await api.subscriptions();
+    const match=existing.find((x:any)=>norm(x.provider)===norm(provider)&&
+      norm(x.plan)===norm(b.plan)&&
+      String(x.account_email||"").trim().toLowerCase()===String(b.account_email||"").trim().toLowerCase());
+    if(match)throw Error("This provider, plan and sign-in email are already saved. Open the existing subscription instead of creating a duplicate.");
+    return req<any>("/subscriptions",{method:"POST",body:JSON.stringify(b)});
+  },
   updateSubscription: (id: string, b: any) => req<any>(`/subscriptions/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteSubscription: (id: string) => req<any>(`/subscriptions/${id}`, { method: "DELETE" }),
   recordPayment: (id: string, b: any) => req<any>(`/subscriptions/${id}/payment`, { method: "POST", body: JSON.stringify(b) }),
