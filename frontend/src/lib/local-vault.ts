@@ -229,7 +229,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       entry.status=action==="approve"?"approved":"dismissed";
       entry.reviewed_at=nowIso();
       if(action==="approve"){
-        const rec=entry.extraction||{};const email=string(rec.account_email||entry.mailbox_email).toLowerCase();
+        const rec={...(entry.extraction||{}),...(data.edits||{})};const email=string(rec.account_email||entry.mailbox_email).toLowerCase();
         if(entry.type==="account"){
           if(rec.provider&&!v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&string(a.email)===email)){
             v.accounts.unshift(normalizeAccount({provider:rec.provider,email,status:"Created",source:"gmail",source_key:entry.source_key,id:"acct-"+uid()}));
