@@ -2,21 +2,22 @@ import { useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import { FlatList, Pressable, RefreshControl, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAccounts, useInvalidateAll } from "@/src/lib/api";
+import { useAccounts, useArchivedSubscriptions, useInvalidateAll } from "@/src/lib/api";
 import { AppHeader, Card, ChipRow, EmptyState, Icon, Loading, PrimaryButton } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 
-const FILTERS = ["All", "With plans", "No plans"] as const;
+const FILTERS = ["All", "With plans", "No plans", "Cancelled / expired"] as const;
 export default function Accounts() {
   const styles = useStyles(), { colors } = useTheme(), insets = useSafeAreaInsets();
   const router = useRouter(), invalidate = useInvalidateAll();
   const [query, setQuery] = useState(""), [filter, setFilter] = useState<string>("All");
   const { data = [], isLoading, isFetching, refetch } = useAccounts();
+  const archive=useArchivedSubscriptions();
   const records = useMemo(() => data.filter((a:any) => {
     const matched = [a.provider,a.email,a.notes,a.status].join(" ").toLowerCase().includes(query.toLowerCase().trim());
-    return matched && (filter === "All" || (filter === "With plans" ? a.plans?.length > 0 : !a.plans?.length));
+    return matched && (filter === "All" || filter === "Cancelled / expired" || (filter === "With plans" ? a.plans?.length > 0 : !a.plans?.length));
   }).sort((a:any,b:any) => String(a.provider).localeCompare(String(b.provider))), [data,filter,query]);
-  const refresh = () => { refetch(); invalidate(); };
+  const refresh = () => { refetch(); archive.refetch(); invalidate(); };
   return <View style={styles.page}>
     <AppHeader title="Accounts" subtitle={data.length + " registered services"} back
       right={<Pressable accessibilityLabel="Add account" accessibilityRole="button" onPress={()=>router.push("/add-account")}>
@@ -28,7 +29,16 @@ export default function Accounts() {
         placeholderTextColor={colors.muted} value={query} onChangeText={setQuery} testID="accounts-search"/>
     </View>
     <ChipRow items={FILTERS as unknown as string[]} value={filter} onChange={setFilter} testIDPrefix="accounts-filter"/>
-    {isLoading ? <Loading/> : <FlatList
+    {filter === "Cancelled / expired" ? <FlatList data={archive.data || []} keyExtractor={(i:any)=>String(i.id)}
+       refreshControl={<RefreshControl refreshing={archive.isFetching} onRefresh={refresh} tintColor={colors.brandPrimary}/>}
+       contentContainerStyle={{padding:16,gap:9,paddingBottom:insets.bottom+40}}
+       ListEmptyComponent={<EmptyState icon="archive-outline" title="No cancelled plans" message="Cancelled and expired plans appear here with their original details and payment history."/>}
+       renderItem={({item}:any)=><Card style={styles.card} onPress={()=>router.push({pathname:"/subscription/[id]",params:{id:item.id}})}>
+          <View style={styles.iconBox}><Icon name="archive-outline" color={colors.brandPrimary} size={27}/></View><View style={{flex:1,gap:4}}>
+            <Text style={styles.name}>{item.provider}</Text><Text style={styles.meta}>{item.plan||item.product||"Plan"} · {item.status}</Text>
+            <Text style={styles.meta}>{item.account_email||"Sign-in email unknown"} · previous subscription</Text>
+          </View><Icon name="chevron-right" size={23} color={colors.muted}/></Card>}/>
+      :isLoading ? <Loading/> : <FlatList
       data={records} keyExtractor={(a:any)=>String(a.id)}
       refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} tintColor={colors.brandPrimary}/>}
       contentContainerStyle={{padding:16,gap:9,paddingBottom:insets.bottom+40}}
