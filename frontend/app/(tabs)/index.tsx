@@ -17,6 +17,7 @@ const AI_PROMPTS = [
 ];
 
 const SMALL_TILES = [
+  { icon: "brain", label: "smart companion", href: "/smart-companion", key: "accentGreen" },
   { icon: "eye-check", label: "plans", href: "/watchlist", key: "accentBlue" },
   { icon: "chart-donut", label: "insights", href: "/insights", key: "accentGreen" },
   { icon: "graph", label: "brain map", href: "/tool-brain", key: "accentPurple" },
