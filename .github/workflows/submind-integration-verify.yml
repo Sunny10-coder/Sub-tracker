@@ -1,4 +1,4 @@
-name: SubMind 2.6 Integration Verification (rerun 2)
+name: SubMind 2.6 Integration Verification (rerun 3)
 
 # One-shot: only creation/edits of this workflow trigger it on the integration
 # branch. Subsequent app edits do not produce automatic GitHub billing.
