@@ -4,6 +4,7 @@
  */
 import { storage } from "@/src/utils/storage";
 import { classifyLink, canonicalUrl, graphFromVault, inferCategory, inferTags } from "@/src/lib/vault-intelligence";
+import { MIN_CONFIDENCE, CLASSIFIER_VERSION } from "@/src/lib/gmail-classifier";
 
 export const LOCAL_VAULT_KEY = "submind.private.import.v1";
 type Dict = Record<string, any>;
@@ -231,10 +232,17 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       const mailbox=string(data.mailbox).toLowerCase();const rows=asArray(data.records);
       if(!mailbox||rows.length>250)throw Error("Invalid mailbox or too many records");
       const seen=new Set([...v.review_queue,...v.mail_activity].map(x=>string(x.source_key)));
-      let added=0;
+      let added=0,filtered=0,duplicates=0;
       for(const incoming of rows){
         const source_key=mailbox+":"+string(incoming.message_id)+":"+string(incoming.type);
-        if(!incoming.message_id||!["subscription","account","promo"].includes(incoming.type)||seen.has(source_key))continue;
+        const provider=string(incoming.extraction?.provider);
+        const confidence=Number(incoming.confidence)||0;
+        const supported=Array.isArray(incoming.evidence)&&incoming.evidence.length>0;
+        if(!incoming.message_id||!["subscription","account","promo"].includes(incoming.type)
+           ||!provider||normalized(provider)==="unknown"||confidence<MIN_CONFIDENCE||!supported){filtered++;continue;}
+        if(seen.has(source_key)){duplicates++;continue;}
+        // The local ingestion endpoint rejects old broad-parser candidates as well.
+        if(Number(incoming.classifier_version)!==CLASSIFIER_VERSION){filtered++;continue;}
         const record={...incoming,id:"mail-"+uid(),source_key,mailbox_email:mailbox,
           status:"needs_review",created_at:nowIso(),review_required:true,
           confidence:Math.min(1,Math.max(0,Number(incoming.confidence)||0))};
@@ -243,7 +251,13 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       const old=v.mailboxes.find(x=>x.email===mailbox);
       if(old){old.last_synced_at=nowIso();old.last_scan_count=rows.length;}
       else v.mailboxes.push({id:"mailbox-"+normalized(mailbox),email:mailbox,last_synced_at:nowIso(),last_scan_count:rows.length});
-      result={added,duplicates:rows.length-added,mailbox,review_pending:v.review_queue.filter(x=>x.status==="needs_review").length};
+      result={added,duplicates,filtered,mailbox,review_pending:v.review_queue.filter(x=>x.status==="needs_review").length};
+   }else if(route==="/mail/cleanup-legacy"&&method==="POST"){
+      const before=v.review_queue.length;
+      v.review_queue=v.review_queue.filter(x=>x.status!=="needs_review"||x.source!=="gmail"&&
+        !(string(x.source_key).includes(":")&&string(x.id).startsWith("mail-"))
+        ||(Number(x.classifier_version)===CLASSIFIER_VERSION&&Number(x.confidence)>=MIN_CONFIDENCE));
+      result={removed:before-v.review_queue.length,preserved: v.review_queue.length};
    }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
       const id=route.split("/")[2];const entry=v.review_queue.find(x=>x.id===id);
       if(!entry)notFound();
