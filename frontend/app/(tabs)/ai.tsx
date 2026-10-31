@@ -49,7 +49,7 @@ export default function AskAI() {
   const chat = useMutation({
     mutationFn: async(q: string) => {
       const v=await getVault();
-      const context="You are SubMind. Use only the provided data for personal facts; never invent prices. Records: "+JSON.stringify({subscriptions:v.subscriptions.slice(0,120),accounts:v.accounts.slice(0,60),benefits:v.benefits.slice(0,60)}).slice(0,20000);
+      const context="You are SubMind. Use only the provided records for personal facts. Never invent prices, active subscriptions, discounts, or account status. If an answer is unsupported say unknown. Data comes from the user\u0027s local SubMind JSON records. Records: "+JSON.stringify({subscriptions:v.subscriptions.slice(0,120),accounts:v.accounts.slice(0,60),benefits:v.benefits.slice(0,60),links:v.links.slice(0,120).map((l:any)=>({title:l.title,url:l.url,category:l.category,tags:l.tags,summary:l.summary})),promos:v.promo_codes.slice(0,50).map((c:any)=>({provider:c.provider,code:c.code,discount_text:c.discount_text,expiry_date:c.expiry_date,verified:c.verified})),prompts:v.prompts.slice(0,100).map((p:any)=>({title:p.title,category:p.category,tags:p.tags})),watchlist:v.watchlist.slice(0,60)}).slice(0,32000);
       return chatDirect(q,context,provider,model||undefined);
     },
     onMutate: (q) => {
