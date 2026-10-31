@@ -1,5 +1,5 @@
 name: Verify SubMind 2.3 Unified Vault
-# One-off CI verification after Android integration; check runs on PR workflow change only.
+# Final one-off CI verification including Gmail silent-signin typing and JSON import changes.
 
 on:
   pull_request:
