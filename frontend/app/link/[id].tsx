@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api, useInvalidateAll, useLink } from "@/src/lib/api";
+import { api, useInvalidateAll, useLink, useLinks } from "@/src/lib/api";
 import { KIND_ICON, KIND_LABEL, REMIND_PRESETS, formatDate, parseTags, relativeDate } from "@/src/lib/format";
 import { AppHeader, Badge, Card, ChipRow, Icon, Loading, PrimaryButton, SectionLabel } from "@/src/components/ui";
 import { font, makeStyles, useTheme } from "@/src/theme";
@@ -28,6 +28,8 @@ export default function LinkDetail() {
   const { data, isLoading, refetch } = useLink(id!);
   const invalidate = useInvalidateAll();
   const [newTags, setNewTags] = useState("");
+  const allLinks=useLinks();
+  const analysis=useMutation({mutationFn:()=>api.analyzeLink(id!),onSuccess:refresh});
 
   const refresh = () => { refetch(); invalidate(); };
   const del = useMutation({ mutationFn: () => api.deleteLink(id!), onSuccess: () => { invalidate(); router.back(); } });
@@ -42,6 +44,7 @@ export default function LinkDetail() {
   const kind: string = l.kind || "article";
   const tags: string[] = l.tags || [];
   const repo = l.repo;
+  const related=(allLinks.data||[]).filter((x:any)=>x.id!==l.id&&((x.tags||[]).some((tag:string)=>tags.includes(tag))||x.category===l.category)).slice(0,4);
 
   const open = async () => {
     try {
@@ -106,6 +109,7 @@ export default function LinkDetail() {
           </Card>
         ) : null}
 
+        {l.analysis_warning ? <Text style={styles.fine}>{l.analysis_warning}</Text> : null}
         {l.analysis_basis ? <Text style={styles.fine}>{BASIS_NOTE[l.analysis_basis] || ""}{l.analysis_ai === false ? " AI was unavailable, so this is a basic summary." : ""}</Text> : null}
 
         <View>
@@ -134,7 +138,14 @@ export default function LinkDetail() {
         {l.note ? <Card><Text style={styles.label}>your note</Text><Text style={styles.body} selectable>{l.note}</Text></Card> : null}
         <Text style={styles.fine}>Saved {formatDate(l.created_at)}{l.opened_count ? ` · opened ${l.opened_count}×` : " · not opened yet"}</Text>
 
+        {related.length ? <Card style={{gap:9}}><Text style={styles.label}>related saved links</Text>
+          {related.map((item:any)=><Text key={item.id} style={[styles.body,{color:colors.brandPrimary}]}
+            onPress={()=>router.push(("/link/"+item.id) as never)}>{item.title||item.url}</Text>)}
+        </Card>:null}
         <View style={{ gap: 8 }}>
+          <PrimaryButton title="Re-analyze content and tags" icon="auto-fix" variant="secondary"
+            loading={analysis.isPending} onPress={()=>analysis.mutate()} testID="reanalyze-link" />
+          {analysis.isError?<Text style={styles.fine}>{(analysis.error as Error).message}</Text>:null}
           {l.url?.startsWith("http") ? <PrimaryButton title="Open link" icon="open-in-new" onPress={open} testID="open-link" /> : null}
           <PrimaryButton title="Delete" icon="trash-can-outline" variant="secondary" onPress={() => Alert.alert("Delete saved link?","This removes the bookmark and its local reminder, but not the original website.",[
             {text:"Keep",style:"cancel"},{text:"Delete",style:"destructive",onPress:()=>del.mutate()}
