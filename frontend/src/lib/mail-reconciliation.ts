@@ -150,8 +150,9 @@ export function applyMailCandidate(
  const activation=["activated","renewed","trial_started","cancelled","expired"].includes(event)||paid;
  if(!activation&&!force){
   // A renewal reminder can safely update a known plan's next date, but not activate it.
-  if(!sub||!date(info.renewal_date))
-   return queueReview(v,candidate,mailbox,"Renewal/expiry notice without confirmed activation or payment",sourceKey,id,now);
+  const deadline=date(info.renewal_date)||date(info.trial_end)||date(info.expiry_date)||date(info.access_end);
+  if(!sub||!deadline)
+   return queueReview(v,candidate,mailbox,"No known plan or reliable renewal, trial or expiry date",sourceKey,id,now);
  }
  if(event==="payment"&&!paid&&!force)
   return queueReview(v,candidate,mailbox,"Payment email lacks verifiable paid amount and recurring-plan evidence",sourceKey,id,now);
