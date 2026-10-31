@@ -240,12 +240,24 @@ export const api = {
   settings: () => req<any>("/settings"),
   patchSettings: (b: any) => req<any>("/settings", { method: "PATCH", body: JSON.stringify(b) }),
 
-  transcribe: async (uri: string): Promise<{ text: string }> => {
-    const form = new FormData();
-    form.append("file", { uri, name: "voice.m4a", type: "audio/mp4" } as any);
-    const res = await fetch(`${serverUrl}/api/stt/transcribe`, { method: "POST", body: form as any });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json();
+  transcribe: async (uri:string):Promise<{text:string}> => {
+    const form=new FormData();
+    form.append("file",{uri,name:"voice.m4a",type:"audio/mp4"} as any);
+    if(serverUrl){
+      const res=await fetch(serverUrl+"/api/stt/transcribe",{method:"POST",body:form as any});
+      if(!res.ok)throw Error("Voice transcription failed: "+res.status+" "+(await res.text()).slice(0,250));
+      return res.json();
+    }
+    const k=await direct.key("groq");
+    if(!k)throw Error("Voice transcription needs the Groq API key in Add > More tools > AI Models & Keys, or a configured speech-to-text server.");
+    form.append("model","whisper-large-v3-turbo");
+    const res=await fetch("https://api.groq.com/openai/v1/audio/transcriptions",{
+      method:"POST",headers:{Authorization:"Bearer "+k},body:form as any
+    });
+    if(!res.ok)throw Error("Groq transcription failed: "+res.status+" "+(await res.text()).slice(0,240));
+    const data=await res.json();
+    if(typeof data.text!=="string")throw Error("Speech provider did not return transcribed text.");
+    return {text:data.text};
   },
 };
 
