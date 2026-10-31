@@ -34,3 +34,38 @@ export async function enrichLinkWithGemini(record: any): Promise<{title:string;s
   tags, enrichment:"gemini-url-note-only"
  };
 }
+
+
+/**
+ * Public GitHub enrichment for server-free Android installs.
+ * No private token, no paid AI and no speculation about repo behavior.
+ * An unavailable API leaves the locally classified bookmark intact.
+ */
+export async function publicGitHubMetadata(rawUrl:string):Promise<Record<string,any>|null>{
+  let url:URL;
+  try{url=new URL(rawUrl);}catch{return null;}
+  if(url.hostname.toLowerCase()!=="github.com")return null;
+  const path=url.pathname.split("/").filter(Boolean);
+  if(path.length<2||!path[0]||!path[1])return null;
+  const owner=path[0],repo=path[1].replace(/\\.git$/i,"");
+  if(!/^[a-zA-Z0-9_.-]+$/.test(owner)||!/^[a-zA-Z0-9_.-]+$/.test(repo))return null;
+  const endpoint="https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo);
+  const res=await fetch(endpoint,{headers:{Accept:"application/vnd.github+json"}});
+  if(!res.ok)return null;
+  const data=await res.json();
+  if(data.private||data.message||typeof data.full_name!=="string")return null;
+  const tags=Array.isArray(data.topics)?data.topics.filter((x:any)=>typeof x==="string").slice(0,10):[];
+  const description=typeof data.description==="string"?data.description.trim().slice(0,650):"";
+  const name=String(data.full_name).slice(0,120);
+  return {
+    title:name,
+    summary:description||"Public GitHub repository. Description was not provided by its owner.",
+    kind:"github",collection:"GitHub",analysis_basis:"repo_metadata",analysis_ai:false,
+    tags:inferTags([name,description,...tags].join(" "),tags),
+    repo:{language:data.language||null,stars:Number.isFinite(Number(data.stargazers_count))?Number(data.stargazers_count):null,
+      forks:Number.isFinite(Number(data.forks_count))?Number(data.forks_count):null,
+      license:data.license?.spdx_id||null,description,
+      archived:data.archived===true,updated_at:data.pushed_at||null,
+      homepage:data.homepage||null}
+  };
+}
