@@ -33,6 +33,8 @@ export default function ImportData() {
    setSummary({subscriptions:vault.subscriptions.length,accounts:vault.accounts.length,
      watchlist:vault.watchlist.length,promos:vault.promo_codes.length,
      review:vault.review_queue.length, benefits:vault.benefits.length,
+     prompts:vault.prompts.length,links:vault.links.length,
+     sources:vault.promo_sources.length,findings:vault.promo_findings.length,
      date:vault.imported_at});
    setImported(result);
   }catch(err:any){Alert.alert("Import failed",err?.message||"Could not read the selected file");}
@@ -50,7 +52,7 @@ export default function ImportData() {
    </Card>
    <Card style={{gap:10}}>
     <Text style={styles.heading}>What gets imported</Text>
-    {["Subscription history and ongoing plans","Accounts and verified sign-in emails","Plan watchlist and offer codes","Review flags for uncertain or conflicting entries"].map(x=>
+    {["Subscription history and ongoing plans","Accounts and verified sign-in emails","Plan watchlist, promo sources and saved offers","AI prompts and saved links","Review flags for uncertain or conflicting entries"].map(x=>
      <View key={x} style={styles.row}><Icon name="check-circle-outline" color={colors.brandSecondary} size={18}/><Text style={styles.copy}>{x}</Text></View>)}
     <Text style={styles.subtle}>Unverified prices stay unknown. Mailbox addresses are not assumed to be login identities. Re-importing the same file merges records by stable ID rather than duplicating them.</Text>
    </Card>
@@ -59,14 +61,16 @@ export default function ImportData() {
     {[
      ["Subscriptions & history",summary.subscriptions],["Accounts",summary.accounts],
      ["Free benefits",summary.benefits],["Watchlist",summary.watchlist],
-     ["Promo codes",summary.promos],["Items to review",summary.review]
+     ["Promo codes",summary.promos],["Saved offers",summary.findings],["Monitored sources",summary.sources],
+     ["AI prompts",summary.prompts],["Saved links",summary.links],["Items to review",summary.review]
     ].map(([name,count])=><View key={name} style={styles.statLine}>
       <Text style={styles.copy}>{name}</Text><Text style={styles.stat}>{count}</Text></View>)}
     <Text style={styles.subtle}>Imported {summary.date ? new Date(summary.date).toLocaleString() : ""}</Text>
-    <PrimaryButton title="Open Home dashboard" icon="home-variant" onPress={()=>router.replace("/(tabs)")}/>
+    <PrimaryButton title="Open SubMind Vault" icon="home-variant" onPress={()=>router.replace("/(tabs)/vault")}/>
    </Card>:null}
    <Card style={{gap:7}}>
     <Text style={styles.heading}>Privacy & backup</Text>
+    <PrimaryButton title="Export complete private JSON backup" icon="database-export-outline" variant="secondary" onPress={()=>router.push("/export-data")}/>
     <Text style={styles.copy}>The imported records are saved in Android app-private storage, but this is not an encrypted, portable backup. Keep the original private JSON file somewhere safe and do not upload it to a public GitHub repository.</Text>
     <Text style={styles.subtle}>Uninstalling the app can erase local data. The existing Excel file remains your separate source copy.</Text>
    </Card>
