@@ -1,4 +1,5 @@
 name: Verify SubMind 2.3 Unified Vault
+# One-off CI verification after TypeScript fixes; no every-push builds.
 
 on:
   push:
