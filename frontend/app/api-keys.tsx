@@ -20,6 +20,8 @@ export default function ApiKeys(){
  const [selected,setSelected]=useState<string>("gemini");
  const [value,setValue]=useState("");const [busy,setBusy]=useState(false);
  const [visible,setVisible]=useState(false);
+ const [testMessage,setTestMessage]=useState("");
+ const [modelList,setModelList]=useState<string[]>([]);
  useEffect(()=>{Promise.all(PROVIDERS.map(async p=>[p.id,Boolean(await storage.secureGet(keyOf(p.id),""))] as const))
   .then(entries=>setConfigured(Object.fromEntries(entries)))},[]);
  const test=async()=>{setBusy(true);setTestMessage("Testing provider...");try{const res=await checkKey(selected as any,value.trim()||undefined);setTestMessage(res);if(selected==="gemini"||selected==="groq"){if(!value.trim()){setModelList(await models(selected as "gemini"|"groq"));}}}catch(e:any){setTestMessage("Connection failed: "+e.message);}finally{setBusy(false)}};
