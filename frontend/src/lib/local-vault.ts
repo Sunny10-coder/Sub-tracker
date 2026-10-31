@@ -4,7 +4,7 @@
  */
 import { storage } from "@/src/utils/storage";
 import { classifyLink, canonicalUrl, graphFromVault, inferCategory, inferTags } from "@/src/lib/vault-intelligence";
-import { MIN_CONFIDENCE, CLASSIFIER_VERSION } from "@/src/lib/gmail-classifier";
+import { MIN_CONFIDENCE, CLASSIFIER_VERSION, classifyMail } from "@/src/lib/gmail-classifier";
 import { applyMailCandidate } from "@/src/lib/mail-reconciliation";
 import type { MailCandidate } from "@/src/lib/gmail-classifier";
 
@@ -110,7 +110,7 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
       if(prior){
         // Preserve saved user edits, confirmed status and known prices when
         // importing a workbook again; do not duplicate recurring renewals.
-        const combined={...incoming,...prior,id:prior.id};
+        const combined:Dict={...incoming,...prior,id:prior.id};
         for(const field of ["price","currency","renewal_date","trial_end","account_email","email"]){
           if((prior[field]==null||prior[field]==="")&&incoming[field]!=null&&incoming[field]!=="")combined[field]=incoming[field];
         }
@@ -671,7 +671,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       if(x.status==="Unknown")fields.push("status");
       return {...x,missing:fields};
     }).filter(x=>x.missing.length).slice(0,100);
-    const promos=v.promo_codes.map(p=>({...p,ref_id:p.id,
+    const promos=v.promo_codes.map((p:Dict)=>({...p,ref_id:p.id,
       description:string(p.description||p.discount_text),expires:p.expiry_date||null,
       days_left:futureDays(p.expiry_date)})).filter(p=>p.code).slice(0,100);
     const dont_forget=v.links.map(l=>{
