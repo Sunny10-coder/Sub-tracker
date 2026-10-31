@@ -67,11 +67,11 @@ export default function MailReview() {
               <>{field(item,"plan","Plan name")}{field(item,"price","Price","decimal-pad")}{field(item,"currency","Currency")}{field(item,"billing_cycle","Billing cycle")}{field(item,"renewal_date","Renewal YYYY-MM-DD")}{field(item,"trial_end","Trial end YYYY-MM-DD")}</>}
             </View>
             {item.type==="subscription"?<Text style={{color:METRO.orange,fontSize:11,lineHeight:17}}>The plan will be recorded as Trial or Unknown with review required; it will not count as confirmed paid spending until verified in its details.</Text>:
-              item.type==="promo"?<Text style={{color:METRO.orange,fontSize:11}}>Coupon eligibility and expiry require confirmation at the source.</Text>:null}
+              item.type==="promo"?<Text style={{color:METRO.orange,fontSize:11}}>Offers without promo codes can also be saved. Eligibility, availability and expiry still need confirmation at the source.</Text>:null}
             <View style={{flexDirection:"row",gap:9,marginTop:2}}>
-              <Pressable disabled={!!working|| (item.type==="promo"&&!String(edits[item.id]?.code??c.code??"").trim())}
+              <Pressable disabled={!!working}
                 onPress={()=>take(item,"approve")}
-                style={{backgroundColor:working?"#3E4651":METRO.green,padding:13,flex:1,alignItems:"center",borderRadius:8,opacity:item.type==="promo"&&!String(edits[item.id]?.code??c.code??"").trim()?0.35:1}}>
+                style={{backgroundColor:working?"#3E4651":METRO.green,padding:13,flex:1,alignItems:"center",borderRadius:8,opacity:working?0.65:1}}>
                 <Text style={{color:METRO.white,fontWeight:"900"}}>{working===item.id?"SAVING…":"APPROVE"}</Text>
               </Pressable>
               <Pressable disabled={!!working} onPress={()=>take(item,"dismiss")} style={{backgroundColor:"#363640",padding:13,flex:1,alignItems:"center",borderRadius:8}}>
