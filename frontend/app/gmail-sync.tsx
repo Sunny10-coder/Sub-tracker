@@ -28,6 +28,14 @@ export default function GmailSync() {
     } catch (e:any) { Alert.alert("Google sign-in", e.message || String(e)); }
     finally { setBusy(false); }
   };
+  const cleanup = () => Alert.alert("Remove old irrelevant Gmail suggestions?",
+    "This removes unreviewed suggestions from the previous broad Gmail parser. Approved accounts, subscriptions, promotions and your original emails remain untouched.",[
+    {text:"Cancel",style:"cancel"},
+    {text:"Remove old suggestions",style:"destructive",onPress:async()=>{
+      try{const result=await api.cleanupLegacyMail();invalidate();setNotice(result.removed+" old unreviewed suggestions cleared. Your approved records were preserved.");}
+      catch(e:any){Alert.alert("Cleanup failed",e.message||String(e))}
+    }}
+  ]);
   const logout = () => Alert.alert("Disconnect Gmail?", "SubMind will stop reading this account. Previously approved records remain on this phone.", [
     {text:"Cancel",style:"cancel"}, {text:"Disconnect",onPress:async()=>{try{await disconnectGmail();setConnected(null);}catch(e:any){Alert.alert("Sign out failed",e.message)}}},
   ]);
@@ -102,6 +110,10 @@ export default function GmailSync() {
           <Text style={{color:METRO.ink,fontSize:12}}>Confirm before saving to Accounts, Plans or Promo Vault</Text>
         </View>
         <Icon name="arrow-right" color={METRO.ink} size={22}/>
+      </Pressable>
+      <Pressable onPress={cleanup} disabled={busy} style={{padding:14,borderRadius:9,borderColor:"#805B3B",borderWidth:1,backgroundColor:"#33261F",flexDirection:"row",alignItems:"center",gap:10}}>
+        <Icon name="broom" size={23} color={METRO.orange}/>
+        <Text style={{color:METRO.white,fontWeight:"900",fontSize:12,flex:1}}>CLEAN UP OLD IRRELEVANT SUGGESTIONS</Text>
       </Pressable>
       <Text style={{color:METRO.white,fontWeight:"900",fontSize:18}}>PREVIOUS MAILBOX SCANS</Text>
       {mailboxes.length===0?<Text style={{color:METRO.dim}}>No mailboxes have been scanned yet.</Text>:mailboxes.map((m:any)=>
