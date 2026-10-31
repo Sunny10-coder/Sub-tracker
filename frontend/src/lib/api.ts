@@ -18,6 +18,13 @@ export const api = {
   dealsSearch: (q: string, mode = "all", refresh = false) => req<any>(`/deals/search?q=${encodeURIComponent(q)}&mode=${mode}&refresh=${refresh}`),
   inspectDeal: (url: string) => req<any>("/deals/inspect", { method: "POST", body: JSON.stringify({ url }) }),
   promoCodes: () => req<any[]>("/deals/codes"),
+  promoSources: () => req<any[]>("/promo/sources"),
+  addPromoSource: (b: any) => req<any>("/promo/sources", { method: "POST", body: JSON.stringify(b) }),
+  updatePromoSource: (id: string, b: any) => req<any>("/promo/sources/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(b) }),
+  deletePromoSource: (id: string) => req<any>("/promo/sources/" + encodeURIComponent(id), { method: "DELETE" }),
+  promoFindings: () => req<any[]>("/promo/findings"),
+  savePromoFinding: (b: any) => req<any>("/promo/findings", { method: "POST", body: JSON.stringify(b) }),
+  deletePromoFinding: (id: string) => req<any>("/promo/findings/" + encodeURIComponent(id), { method: "DELETE" }),
   prompts: () => req<any[]>("/prompts"),
   createPrompt: (b: any) => req<any>("/prompts", { method: "POST", body: JSON.stringify(b) }),
   updatePrompt: (id: string, b: any) => req<any>("/prompts/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(b) }),
@@ -85,6 +92,8 @@ export const api = {
 
 // ------- hooks -------
 export const usePromoCodes = () => useQuery({ queryKey: ["promo-codes"], queryFn: api.promoCodes });
+export const usePromoSources = () => useQuery({ queryKey: ["promo-sources"], queryFn: api.promoSources });
+export const usePromoFindings = () => useQuery({ queryKey: ["promo-findings"], queryFn: api.promoFindings });
 export const usePrompts = () => useQuery({ queryKey: ["prompts"], queryFn: api.prompts });
 export const useMailboxes = () => useQuery({ queryKey: ["mailboxes"], queryFn: api.mailboxes });
 export const useReviewQueue = () => useQuery({ queryKey: ["review-queue"], queryFn: api.reviewQueue });
@@ -109,7 +118,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["promo-codes", "prompts", "mailboxes", "review-queue", "price-history", "vault-dashboard", "accounts", "insights", "subscriptions", "inbox", "links", "watchlist", "reminders", "link-reminder", "graph"].forEach((k) =>
+    ["promo-codes", "promo-sources", "promo-findings", "prompts", "mailboxes", "review-queue", "price-history", "vault-dashboard", "accounts", "insights", "subscriptions", "inbox", "links", "watchlist", "reminders", "link-reminder", "graph"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }
