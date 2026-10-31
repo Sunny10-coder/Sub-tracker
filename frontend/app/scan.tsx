@@ -20,6 +20,7 @@ export default function Scan() {
   const [status, setStatus] = useState<"idle" | "picking" | "processing" | "done" | "error" | "blocked">("idle");
   const [preview, setPreview] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
+  const [errorMessage,setErrorMessage]=useState("");
   const started = useRef(false);
 
   useEffect(() => {
@@ -48,7 +49,8 @@ export default function Scan() {
       setResult(inbox);
       invalidate();
       setStatus("done");
-    } catch (e) {
+    } catch (e:any) {
+      setErrorMessage(e?.message||"Something went wrong");
       setStatus("error");
     }
   };
@@ -87,7 +89,7 @@ export default function Scan() {
         {status === "error" && (
           <Card style={styles.center}>
             <Icon name="alert-circle-outline" size={30} color={colors.error} />
-            <Text style={styles.centerText}>Something went wrong. Please try again.</Text>
+            <Text style={styles.centerText}>{errorMessage||"Something went wrong. Please try again."}</Text>
             <PrimaryButton title="Retry" icon="refresh" onPress={run} />
           </Card>
         )}
