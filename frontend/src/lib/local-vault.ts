@@ -159,7 +159,11 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  const params=new URLSearchParams(qs||"");const data=jsonBody(opts);
  if(method!=="GET")return mutate(async()=>{const v=await getVault();let result:any=null;
    const collection=(name:keyof Vault)=>((v[name] as Dict[])||[]);
-   if(route==="/subscriptions"&&method==="POST"){
+   if(route==="/subscriptions/check-duplicate"&&method==="POST"){
+      const existing=v.subscriptions.find(x=>normalized(x.provider)===normalized(data.provider)
+        &&normalized(x.plan)===normalized(data.plan)&&string(x.account_email)===string(data.account_email));
+      result={duplicate:Boolean(existing),existing_id:existing?.id||null,subscription:existing||null};
+   }else if(route==="/subscriptions"&&method==="POST"){
       const rec=normalizeSub({...data,id:"sub-"+uid(),created_at:nowIso()});
       if(v.subscriptions.some(x=>normalized(x.provider)===normalized(rec.provider)
        &&normalized(x.plan)===normalized(rec.plan)&&string(x.account_email)&&string(x.account_email)===string(rec.account_email)))
@@ -188,6 +192,18 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       else {if(!x)notFound();Object.assign(x,data);result=x;}
    }else if(route==="/watchlist"&&method==="POST"){
       const rec=normalizeWatch({...data,id:"watch-"+uid()});v.watchlist.unshift(rec);result=rec;
+   }else if(route.startsWith("/watchlist/")&&route.endsWith("/convert")&&method==="POST"){
+      const id=route.split("/")[2];const plan=v.watchlist.find(x=>x.id===id);
+      if(!plan)notFound();
+      const existing=v.subscriptions.find(s=>normalized(s.provider)===normalized(plan.provider)&&normalized(s.plan)===normalized(plan.plan)
+        &&string(s.account_email)===string(plan.account_email||""));
+      if(existing)result={duplicate:true,subscription_id:existing.id,subscription:existing};
+      else{
+        const sub=normalizeSub({...plan,id:"sub-"+uid(),status:"Unknown",review_required:true,
+          source:"watchlist",created_at:nowIso(),account_email:string(plan.account_email),billing_cycle:plan.billing_cycle||"unknown"});
+        v.subscriptions.unshift(sub);plan.status="Moved to plans";
+        result={duplicate:false,subscription_id:sub.id,subscription:sub};
+      }
    }else if(route.startsWith("/watchlist/")&&method==="DELETE"){
       v.watchlist=v.watchlist.filter(a=>a.id!==route.split("/")[2]);result={ok:true};
    }else if(route==="/deals/codes"&&method==="POST"){
@@ -290,9 +306,17 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else if(route==="/ingest/link"&&method==="POST"){
       const classified=classifyLink(String(data.url||""),String(data.text||""),String(data.source||"share"));
       const existing=v.links.find(l=>l.canonical_url===classified.canonical_url);
-      if(existing)result={link_id:existing.id,duplicate:true,link:existing};
+      let target:Dict;
+      if(existing){target=existing;result={link_id:existing.id,duplicate:true,link:existing};}
       else{const rec={...classified,id:"link-"+uid(),created_at:nowIso()};
-       v.links.unshift(rec);result={link_id:rec.id,duplicate:false,link:rec}}
+       v.links.unshift(rec);target=rec;result={link_id:rec.id,duplicate:false,link:rec};}
+      if(string(data.reminder_date)){
+        let reminder=v.reminders.find(r=>r.ref_type==="link"&&r.ref_id===target.id&&!r.completed);
+        if(!reminder){reminder={id:"rem-"+uid(),ref_id:target.id,ref_type:"link",completed:false,created_at:nowIso()};v.reminders.unshift(reminder);}
+        Object.assign(reminder,{title:string(data.reminder_title)||"Review saved link",due_date:data.reminder_date,
+          remind_time:string(data.reminder_time)||"09:00"});
+        target.reminder_id=reminder.id;
+      }
    }else if(route==="/deals/track-price"&&method==="POST"){
       const rec={id:"price-"+uid(),checked_at:nowIso(),...data};
       v.price_snapshots.unshift(rec);result={duplicate:false,record:rec,change:null};
