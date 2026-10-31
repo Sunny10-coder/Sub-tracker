@@ -598,14 +598,45 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  else if(route==="/mailboxes")result=v.mailboxes;
  else if(route==="/review-queue")result=v.review_queue.filter(x=>x.status==="needs_review");
  else if(route==="/deals/price-history")result=v.price_snapshots.filter(x=>!params.get("provider")||normalized(x.provider).includes(normalized(params.get("provider"))));
- else if(route==="/links")result=v.links;
+ else if(route==="/links")result=v.links.filter(l=>!params.get("source")||params.get("source")==="All"||lower(l.source)===lower(params.get("source")));
+ else if(route==="/links/tags"){
+    const counts=new Map<string,number>();
+    for(const link of v.links)for(const tag of (link.tags||[]))counts.set(String(tag),(counts.get(String(tag))||0)+1);
+    result=[...counts].map(([tag,count])=>({tag,count})).sort((a,b)=>b.count-a.count);
+ }
  else if(route.startsWith("/links/")&&route.endsWith("/reminder"))result=v.reminders.find(r=>r.ref_type==="link"&&r.ref_id===route.split("/")[2]&&!r.completed)||null;
  else if(route.startsWith("/links/"))result=v.links.find(x=>x.id===route.split("/")[2])||notFound();
  else if(route==="/reminders")result=v.reminders;
  else if(route==="/settings")result=v.settings;
- else if(route==="/inbox")result=v.review_queue.filter(x=>x.status==="needs_review"&&
-   (!params.get("tab")||params.get("tab")==="all"||params.get("tab")==="All"||lower(x.type)===lower(params.get("tab"))));
- else if(route==="/graph")result=graphFromVault(v);
+ else if(route==="/inbox"){
+    const tab=lower(params.get("tab")||"needs_review");
+    result=v.review_queue.filter(x=>
+      tab==="all"||(tab==="needs_review"?["needs_review","pending"].includes(string(x.status)):
+      tab==="auto_added"?["auto_added","added","approved"].includes(string(x.status)):
+      tab==="duplicates"?["duplicate","merged"].includes(string(x.status)):lower(x.status)===tab));
+ }else if(route.startsWith("/inbox/")){
+    result=v.review_queue.find(x=>x.id===route.split("/")[2])||notFound();
+ }else if(route==="/memory/dashboard"){
+    const radar=v.subscriptions.filter(x=>["Active","Trial"].includes(x.status)).map(x=>{
+      const deadline=dueDate(x),days=futureDays(deadline);
+      return {id:x.id,provider:x.provider,days_left:days,charge_date:deadline,
+        cancel_by:deadline,price:x.price,currency:x.currency,is_trial:x.status==="Trial",
+        account_email:x.account_email,where:{
+          url:x.cancel_url||null,
+          steps:x.cancel_url?"Open the saved provider cancellation URL and confirm cancellation.":"Cancellation instructions have not been confirmed. Check the provider billing settings."
+        }};
+    }).filter(x=>x.days_left!==null&&x.days_left>=0&&x.days_left<=30).sort((a,b)=>(a.days_left??99)-(b.days_left??99));
+    const accountMap=new Map<string,any[]>();
+    for(const sub of v.subscriptions){const mail=string(sub.account_email)||"unknown";
+      accountMap.set(mail,[...(accountMap.get(mail)||[]),{provider:sub.provider,plan:sub.plan,status:sub.status,id:sub.id}]);}
+    result={cancel_radar:radar,urgent_count:radar.filter(x=>(x.days_left??99)<=3).length,
+      promos:v.promo_codes.slice(0,25),
+      accounts_by_email:[...accountMap].map(([email,subscriptions])=>({email,subscriptions})),
+      missing_info:v.subscriptions.filter(x=>!x.account_email||!x.renewal_date||x.price==null||x.status==="Unknown").slice(0,100),
+      links:v.links.slice(0,40),accounts:v.accounts.length};
+ }else if(route==="/ai/compare"){
+    result={items:[],comparison:"Choose two saved plans to compare. Prices and benefits not present in your vault remain unknown."};
+ } else if(route==="/graph")result=graphFromVault(v);
  else if(route.startsWith("/search")){
    const q=lower(params.get("q")).trim();const has=(x:Dict)=>lower([x.provider,x.title,x.text,x.code,x.url,x.email,x.plan,(x.tags||[]).join(" ")].join(" ")).includes(q);
    result={subscriptions:v.subscriptions.filter(has).slice(0,50),links:v.links.filter(has).slice(0,50),
