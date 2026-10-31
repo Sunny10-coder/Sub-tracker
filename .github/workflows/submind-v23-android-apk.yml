@@ -8,7 +8,7 @@ on:
       - '.github/workflows/submind-v23-android-apk.yml'
   workflow_dispatch:
 
-# Run once per workflow file update; no build on every source push.
+# One-off PR build: updated validation workflow for v2.4.
 
 permissions:
   contents: read
