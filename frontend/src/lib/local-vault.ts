@@ -332,7 +332,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else{throw Error("This action needs an optional backend or is not available offline: "+route)}
    await save(v);return result as T;
  });
- const v=await getVault();const accounts=v.accounts.map(a=>({...a,
+ const v=await getVault();const accounts:Dict[]=v.accounts.map((a:Dict)=>({...a,
   plans:v.subscriptions.filter(s=>(s.account_email&&a.email&&s.account_email===a.email&&normalized(s.provider)===normalized(a.provider)))
    .map(s=>({id:s.id,plan:s.plan,status:s.status})),
   active_plans:v.subscriptions.filter(s=>(s.account_email&&a.email&&s.account_email===a.email&&normalized(s.provider)===normalized(a.provider))
