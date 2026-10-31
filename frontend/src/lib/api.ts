@@ -136,7 +136,14 @@ export const api = {
   insights: () => req<any>("/insights"),
   accounts: () => localRequest<any[]>("/accounts"),
   createAccount: (b:any) => localRequest<any>("/accounts",{method:"POST",body:JSON.stringify(b)}),
-  account: (id:string) => localRequest<any>("/accounts/"+encodeURIComponent(id)),
+  account: async (id:string) => {
+    const record=await localRequest<any>("/accounts/"+encodeURIComponent(id));
+    const plans=await api.subscriptions().catch(()=>[]);
+    const same=(x:any)=>String(x.provider||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+    return {...record,plans:plans.filter((x:any)=>same(x)===same(record)&&
+      String(x.account_email||"").toLowerCase()===String(record.email||"").toLowerCase())
+      .map((x:any)=>({id:x.id,plan:x.plan,status:x.status}))};
+  },
   updateAccount: (id:string,b:any) => localRequest<any>("/accounts/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify(b)}),
   deleteAccount: (id:string) => localRequest<any>("/accounts/"+encodeURIComponent(id),{method:"DELETE"}),
   vaultDashboard: () => localRequest<any>("/vault/dashboard"),
