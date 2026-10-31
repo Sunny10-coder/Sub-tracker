@@ -6,6 +6,7 @@ import { METRO, MetroBrand, MetroTile } from "@/src/components/metro-tiles";
 import { Icon } from "@/src/components/ui";
 import { api, useInvalidateAll, useMailboxes, useReviewQueue } from "@/src/lib/api";
 import { connectGmail, disconnectGmail, getConnectedGmail, scanConnectedGmail } from "@/src/lib/gmail-sync";
+import type { MailType } from "@/src/lib/gmail-classifier";
 
 export default function GmailSync() {
   const router = useRouter();const insets = useSafeAreaInsets();
@@ -14,6 +15,7 @@ export default function GmailSync() {
   const [progress, setProgress] = useState(0);
   const [notice, setNotice] = useState("Sign in to Gmail to scan only the messages relevant to your accounts, billing and offers.");
   const [days, setDays] = useState(180);
+  const [kinds,setKinds]=useState<MailType[]>(["subscription","account","promo"]);
   const {data:mailboxes=[]} = useMailboxes();
   const {data:queue=[]} = useReviewQueue();
   const invalidate = useInvalidateAll();
@@ -26,6 +28,14 @@ export default function GmailSync() {
     } catch (e:any) { Alert.alert("Google sign-in", e.message || String(e)); }
     finally { setBusy(false); }
   };
+  const cleanup = () => Alert.alert("Remove old irrelevant Gmail suggestions?",
+    "This removes unreviewed suggestions from the previous broad Gmail parser. Approved accounts, subscriptions, promotions and your original emails remain untouched.",[
+    {text:"Cancel",style:"cancel"},
+    {text:"Remove old suggestions",style:"destructive",onPress:async()=>{
+      try{const result=await api.cleanupLegacyMail();invalidate();setNotice(result.removed+" old unreviewed suggestions cleared. Your approved records were preserved.");}
+      catch(e:any){Alert.alert("Cleanup failed",e.message||String(e))}
+    }}
+  ]);
   const logout = () => Alert.alert("Disconnect Gmail?", "SubMind will stop reading this account. Previously approved records remain on this phone.", [
     {text:"Cancel",style:"cancel"}, {text:"Disconnect",onPress:async()=>{try{await disconnectGmail();setConnected(null);}catch(e:any){Alert.alert("Sign out failed",e.message)}}},
   ]);
@@ -33,10 +43,10 @@ export default function GmailSync() {
     if(!connected)return;
     setBusy(true);setProgress(0);setNotice("Reading matching Gmail messages on this phone…");
     try {
-      const result=await scanConnectedGmail({days,limit:days>=730?200:100,onProgress:setProgress});
+      const result=await scanConnectedGmail({days,limit:days>=730?200:120,kinds,onProgress:setProgress});
       const imported=await api.importMail(result.email,result.candidates);
       invalidate();
-      setNotice("Scanned "+result.messages_scanned+" messages. "+imported.added+" new candidates; "+imported.duplicates+" already seen or duplicates."
+      setNotice("Reviewed "+result.messages_scanned+" matching emails. "+result.rejected+" rejected as unrelated; "+imported.added+" specific candidates saved; "+imported.duplicates+" duplicates; "+imported.filtered+" failed evidence rules."
         +(result.limited?" Scan limit reached. Choose an older range or repeat when needed.":""));
     } catch (e:any) { Alert.alert("Gmail scan failed",e.message || String(e));setNotice("Scan incomplete. No unapproved records were automatically made active."); }
     finally { setBusy(false); }
@@ -72,13 +82,22 @@ export default function GmailSync() {
       </View>
       <View style={card}>
         <Text style={{...txt,fontSize:18,fontWeight:"900"}}>SCAN SUBSCRIPTIONS & OFFERS</Text>
-        <Text style={{color:METRO.dim,fontSize:12,lineHeight:19}}>Find account creations, paid subscriptions, renewals, trials, coupons, giveaways and promotions. All matches go to your review inbox before creating records.</Text>
+        <Text style={{color:METRO.dim,fontSize:12,lineHeight:19}}>Precision mode: checks specific subject lines, verifies transactional evidence and rejects generic newsletters, routine receipts, login codes and incidental marketing text. Only strong matches enter review.</Text>
         <View style={{flexDirection:"row",gap:7}}>
           {[30,180,730].map(d=><Pressable key={d} onPress={()=>setDays(d)} style={{flex:1,padding:11,borderRadius:7,alignItems:"center",backgroundColor:days===d?METRO.purple:"#262633"}}>
             <Text style={{color:METRO.white,fontWeight:"800",fontSize:12}}>{d===30?"30 DAYS":d===180?"6 MONTHS":"2 YEARS"}</Text>
           </Pressable>)}
         </View>
-        <Pressable disabled={!connected||busy} onPress={scan} style={{backgroundColor:!connected||busy?"#39434A":METRO.green,padding:16,alignItems:"center",borderRadius:8,flexDirection:"row",justifyContent:"center",gap:10}}>
+        <Text style={{color:METRO.white,fontWeight:"900",fontSize:13}}>ONLY SEARCH FOR</Text>
+        <View style={{flexDirection:"row",gap:8,flexWrap:"wrap"}}>
+          {([{id:"subscription",name:"RENEWALS & TRIALS"},{id:"account",name:"ACCOUNT CREATION"},{id:"promo",name:"OFFERS & CODES"}] as const).map(k=>
+            <Pressable key={k.id} onPress={()=>setKinds(s=>s.includes(k.id)?s.filter(x=>x!==k.id):[...s,k.id])}
+              style={{paddingHorizontal:11,paddingVertical:10,borderRadius:7,borderWidth:1,borderColor:kinds.includes(k.id)?METRO.green:"#4B4B56",
+                backgroundColor:kinds.includes(k.id)?"#183D31":"#262633"}}>
+              <Text style={{color:METRO.white,fontSize:11,fontWeight:"800"}}>{kinds.includes(k.id)?"✓ ":""}{k.name}</Text>
+            </Pressable>)}
+        </View>
+        <Pressable disabled={!connected||busy||!kinds.length} onPress={scan} style={{backgroundColor:!connected||busy?"#39434A":METRO.green,padding:16,alignItems:"center",borderRadius:8,flexDirection:"row",justifyContent:"center",gap:10}}>
           {busy ? <ActivityIndicator color={METRO.white}/> : <Icon name="magnify-scan" color={METRO.white} size={24}/>}
           <Text style={{color:METRO.white,fontWeight:"900"}}>{busy?"READING "+progress+" MESSAGES":"SCAN GMAIL"}</Text>
         </Pressable>
@@ -91,6 +110,10 @@ export default function GmailSync() {
           <Text style={{color:METRO.ink,fontSize:12}}>Confirm before saving to Accounts, Plans or Promo Vault</Text>
         </View>
         <Icon name="arrow-right" color={METRO.ink} size={22}/>
+      </Pressable>
+      <Pressable onPress={cleanup} disabled={busy} style={{padding:14,borderRadius:9,borderColor:"#805B3B",borderWidth:1,backgroundColor:"#33261F",flexDirection:"row",alignItems:"center",gap:10}}>
+        <Icon name="broom" size={23} color={METRO.orange}/>
+        <Text style={{color:METRO.white,fontWeight:"900",fontSize:12,flex:1}}>CLEAN UP OLD IRRELEVANT SUGGESTIONS</Text>
       </Pressable>
       <Text style={{color:METRO.white,fontWeight:"900",fontSize:18}}>PREVIOUS MAILBOX SCANS</Text>
       {mailboxes.length===0?<Text style={{color:METRO.dim}}>No mailboxes have been scanned yet.</Text>:mailboxes.map((m:any)=>
