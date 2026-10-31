@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "SubMind Metro",
+    "name": "SubMind",
     "slug": "frontend",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "submind",
@@ -27,7 +27,7 @@
         "RECORD_AUDIO",
         "READ_MEDIA_IMAGES"
       ],
-      "versionCode": 4
+      "versionCode": 5
     },
     "web": {
       "bundler": "metro",
@@ -58,7 +58,20 @@
           "cameraPermission": "Scan subscription screenshots and receipts"
         }
       ],
-      "@react-native-vector-icons/material-design-icons"
+      "@react-native-vector-icons/material-design-icons",
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-sharing",
+        {
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": [
+              "text/plain"
+            ],
+            "multipleShareMimeTypes": []
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
