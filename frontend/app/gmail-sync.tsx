@@ -44,7 +44,7 @@ export default function GmailSync() {
     setBusy(true);setProgress(0);setNotice("Reading matching Gmail messages on this phone…");
     try {
       const result=await scanConnectedGmail({days,limit:days>=730?200:120,kinds,onProgress:setProgress});
-      const imported=await api.importMail(result.email,result.candidates);
+      const imported=await api.autoSyncMail(result.email,result.candidates);
       invalidate();
       setNotice("Reviewed "+result.messages_scanned+" matching emails. "+result.rejected+" rejected as unrelated; "+imported.added+" specific candidates saved; "+imported.duplicates+" duplicates; "+imported.filtered+" failed evidence rules."
         +(result.limited?" Scan limit reached. Choose an older range or repeat when needed.":""));
