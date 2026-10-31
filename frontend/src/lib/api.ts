@@ -33,6 +33,7 @@ export const api = {
   reviewQueue: () => req<any[]>("/review-queue"),
   importMail: (mailbox: string, records: any[]) => req<any>("/mail/ingest", { method: "POST", body: JSON.stringify({ mailbox, records }) }),
   autoSyncMail: (mailbox: string, records: any[]) => req<any>("/mail/auto-sync", { method: "POST", body: JSON.stringify({ mailbox, records }) }),
+  smartSyncMail: (mailbox: string, records: any[], meta?: {days?:number;messages_scanned?:number;limited?:boolean}) => req<{added:number;updated:number;duplicate:number;review:number;ignored:number;review_pending:number}>("/mail/smart-sync", { method:"POST",body:JSON.stringify({mailbox,records,...meta}) }),
   cleanupLegacyMail: () => req<{removed:number;preserved:number}>("/mail/cleanup-legacy", { method: "POST", body: "{}" }),
   savePromoCode: (b: any) => req<any>("/deals/codes", { method: "POST", body: JSON.stringify(b) }),
   priceHistory: (provider = "") => req<any[]>(`/deals/price-history?provider=${encodeURIComponent(provider)}`),
