@@ -60,7 +60,7 @@ export async function getConnectedGmail():Promise<string|null>{
 }
 export async function connectGmail(forceChooser=false):Promise<string>{
   configure();
-  if(forceChooser)await GoogleSignin.signOut();
+  if(forceChooser){await GoogleSignin.signOut();activeGoogleAccount=null;}
   await GoogleSignin.hasPlayServices({showPlayServicesUpdateDialog:true});
   const result=await GoogleSignin.signIn({});
   if(!isSuccessResponse(result))throw Error("Google sign-in was cancelled or failed.");
