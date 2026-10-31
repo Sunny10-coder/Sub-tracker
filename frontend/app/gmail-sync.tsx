@@ -80,7 +80,16 @@ export default function GmailSync() {
             <Text style={{color:METRO.white,fontWeight:"800",fontSize:12}}>{d===30?"30 DAYS":d===180?"6 MONTHS":"2 YEARS"}</Text>
           </Pressable>)}
         </View>
-        <Pressable disabled={!connected||busy} onPress={scan} style={{backgroundColor:!connected||busy?"#39434A":METRO.green,padding:16,alignItems:"center",borderRadius:8,flexDirection:"row",justifyContent:"center",gap:10}}>
+        <Text style={{color:METRO.white,fontWeight:"900",fontSize:13}}>ONLY SEARCH FOR</Text>
+        <View style={{flexDirection:"row",gap:8,flexWrap:"wrap"}}>
+          {([{id:"subscription",name:"RENEWALS & TRIALS"},{id:"account",name:"ACCOUNT CREATION"},{id:"promo",name:"OFFERS & CODES"}] as const).map(k=>
+            <Pressable key={k.id} onPress={()=>setKinds(s=>s.includes(k.id)?s.filter(x=>x!==k.id):[...s,k.id])}
+              style={{paddingHorizontal:11,paddingVertical:10,borderRadius:7,borderWidth:1,borderColor:kinds.includes(k.id)?METRO.green:"#4B4B56",
+                backgroundColor:kinds.includes(k.id)?"#183D31":"#262633"}}>
+              <Text style={{color:METRO.white,fontSize:11,fontWeight:"800"}}>{kinds.includes(k.id)?"✓ ":""}{k.name}</Text>
+            </Pressable>)}
+        </View>
+        <Pressable disabled={!connected||busy||!kinds.length} onPress={scan} style={{backgroundColor:!connected||busy?"#39434A":METRO.green,padding:16,alignItems:"center",borderRadius:8,flexDirection:"row",justifyContent:"center",gap:10}}>
           {busy ? <ActivityIndicator color={METRO.white}/> : <Icon name="magnify-scan" color={METRO.white} size={24}/>}
           <Text style={{color:METRO.white,fontWeight:"900"}}>{busy?"READING "+progress+" MESSAGES":"SCAN GMAIL"}</Text>
         </Pressable>
