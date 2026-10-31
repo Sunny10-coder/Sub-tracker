@@ -7,47 +7,101 @@
  * to testing audience (or production verification when applicable).
  */
 import { Platform } from "react-native";
+import { storage } from "@/src/utils/storage";
 import { GoogleSignin, isSuccessResponse } from "@react-native-google-signin/google-signin";
 import { buildGmailQueries, classifyMail, type MailCandidate, type MailType } from "@/src/lib/gmail-classifier";
 
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
-let configured = false;
-function configure() {
-  if (Platform.OS !== "android") throw Error("Gmail OAuth currently requires the Android APK.");
-  if (!configured) { GoogleSignin.configure({ scopes: [GMAIL_SCOPE], offlineAccess: false }); configured = true; }
+const REGISTERED_MAILBOXES="submind.gmail.registered-mailboxes.v1";
+let activeGoogleAccount:string|null=null;
+function configure(accountName?:string){
+  if(Platform.OS!=="android")throw Error("Gmail OAuth requires the Android APK.");
+  // Google SignIn is a single active session. Android can prioritise a
+  // registered device account; we must verify the actual email before reading.
+  GoogleSignin.configure({scopes:[GMAIL_SCOPE],offlineAccess:false,
+    ...(accountName?{accountName}:{})});
 }
-export async function getConnectedGmail(): Promise<string | null> {
-  configure();
-  let user = GoogleSignin.getCurrentUser();
-  if (!user && GoogleSignin.hasPreviousSignIn()) {
+const normal=(v:any)=>String(v||"").trim().toLowerCase();
+export async function getRegisteredMailboxes():Promise<string[]>{
+  const raw=await storage.getItem(REGISTERED_MAILBOXES,"[]");
+  try{
+    const list=JSON.parse(String(raw||"[]"));
+    return Array.isArray(list)?Array.from(new Set(list.map(normal))).filter((e:string)=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)).slice(0,3):[];
+  }catch{return [];}
+}
+export async function registerMailbox(email:string):Promise<string[]>{
+  const value=normal(email);
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))throw Error("Google returned an invalid Gmail identity.");
+  const previous=await getRegisteredMailboxes();
+  if(previous.includes(value))return previous;
+  if(previous.length>=3)throw Error("SubMind allows up to three registered Gmail accounts. Remove one first.");
+  const next=[...previous,value];
+  if(!await storage.setItem(REGISTERED_MAILBOXES,JSON.stringify(next)))throw Error("Could not save Gmail account list.");
+  return next;
+}
+export async function forgetMailbox(email:string):Promise<string[]>{
+  const next=(await getRegisteredMailboxes()).filter(x=>x!==normal(email));
+  if(!await storage.setItem(REGISTERED_MAILBOXES,JSON.stringify(next)))throw Error("Could not update Gmail account list");
+  return next;
+}
+export async function getConnectedGmail():Promise<string|null>{
+  configure(activeGoogleAccount||undefined);
+  let user=GoogleSignin.getCurrentUser();
+  if(!user&&GoogleSignin.hasPreviousSignIn()){
     try {
-      const restored = await GoogleSignin.signInSilently();
-      if (restored.type === "success") user = restored.data;
-    } catch { return null; }
+      const restored=await GoogleSignin.signInSilently();
+      if(restored.type==="success")user=restored.data;
+    }catch{return null;}
   }
-  return String(user?.user?.email || "").toLowerCase() || null;
+  const address=normal(user?.user?.email);
+  if(address)activeGoogleAccount=address;
+  return address||null;
 }
-export async function connectGmail(forceChooser = false): Promise<string> {
+export async function connectGmail(forceChooser=false):Promise<string>{
   configure();
-  if (forceChooser) await GoogleSignin.signOut();
-  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-  const result = await GoogleSignin.signIn({});
-  if (!isSuccessResponse(result)) throw Error("Google sign-in was cancelled or did not succeed.");
-  const email = String(result.data.user.email || "").toLowerCase();
-  if (!email) throw Error("Google sign-in did not provide a mailbox address.");
-  return email;
+  if(forceChooser){await GoogleSignin.signOut();activeGoogleAccount=null;}
+  await GoogleSignin.hasPlayServices({showPlayServicesUpdateDialog:true});
+  const result=await GoogleSignin.signIn({});
+  if(!isSuccessResponse(result))throw Error("Google sign-in was cancelled or failed.");
+  const address=normal(result.data.user.email);
+  if(!address)throw Error("Google sign-in returned no email address.");
+  const registered=await getRegisteredMailboxes();
+  if(registered.length>=3&&!registered.includes(address)){
+    throw Error("Three accounts are already registered. Remove one before connecting another.");
+  }
+  activeGoogleAccount=address;
+  await registerMailbox(address);
+  return address;
 }
-export async function disconnectGmail(revoke = false): Promise<void> {
+/**
+ * Attempts to silently select a previously authorised Android Google account.
+ * Does NOT open interactive consent or read the wrong user's mailbox.
+ * Returns null if Google Play Services cannot silently restore this identity.
+ */
+export async function selectRegisteredMailbox(email:string):Promise<string|null>{
+  const target=normal(email);
+  if(!(await getRegisteredMailboxes()).includes(target))return null;
+  configure(target);
+  try{
+    const result=await GoogleSignin.signInSilently();
+    if(result.type!=="success"||normal(result.data.user.email)!==target)return null;
+    activeGoogleAccount=target;
+    const response=await gmailRequest("/profile");
+    if(normal(response.emailAddress)!==target)return null;
+    return target;
+  }catch{return null;}
+}
+export async function disconnectGmail(revoke=false):Promise<void>{
   configure();
-  if (revoke) await GoogleSignin.revokeAccess();
+  if(revoke)await GoogleSignin.revokeAccess();
   else await GoogleSignin.signOut();
+  activeGoogleAccount=null;
 }
 function urlQuery(base: string, params: Record<string, string | number>): string {
   return base + "?" + Object.entries(params).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
 }
 async function gmailRequest(path: string, allowRefresh = true): Promise<any> {
-  configure();
   const { accessToken } = await GoogleSignin.getTokens();
   const res = await fetch(GMAIL_API + path, { headers: { Authorization: "Bearer " + accessToken, Accept: "application/json" } });
   if (res.status === 401 && allowRefresh) {
@@ -93,40 +147,57 @@ function extractPlain(payload: any, depth = 0): string {
 function header(payload: any, name: string): string {
   return String((payload?.headers || []).find((h: any) => String(h.name).toLowerCase() === name)?.value || "");
 }
-export type GmailScanResult = { email: string; messages_scanned: number; candidates: MailCandidate[]; limited: boolean; rejected: number; search_matches: number };
-export async function scanConnectedGmail(options: {
- days?: number; limit?: number; onProgress?: (n:number)=>void; kinds?:MailType[];
+export type GmailScanResult={email:string;messages_scanned:number;candidates:MailCandidate[];
+  limited:boolean;rejected:number;search_matches:number;scan_started_at:string};
+export function currentGoogleMailbox(){return activeGoogleAccount;}
+
+export async function scanConnectedGmail(options:{
+  days?:number;limit?:number;onProgress?:(n:number)=>void;kinds?:MailType[];
+  expectedEmail?:string;
 }={}):Promise<GmailScanResult>{
- configure();
- const email=await getConnectedGmail();
- if(!email)throw Error("Connect a Google account first.");
- const limit=Math.min(300,Math.max(1,options.limit||120));
- const queries=buildGmailQueries(options.days||180,options.kinds);
- if(!queries.length)throw Error("Select at least one Gmail category to scan.");
- const seen=new Map<string,{id:string}>();
- let limited=false;
- for(const {q} of queries){
-   let pageToken:string|undefined;
-   do{
-     if(seen.size>=limit){limited=true;break;}
-     const response=await gmailRequest(urlQuery("/messages",{
-       q,maxResults:Math.min(100,limit-seen.size),...(pageToken?{pageToken}:{})
-     }));
-     for(const msg of response.messages||[])if(msg.id&&!seen.has(msg.id))seen.set(msg.id,msg);
-     pageToken=response.nextPageToken;
-   }while(pageToken&&seen.size<limit);
-   if(pageToken)limited=true;
- }
- const candidates:MailCandidate[]=[];
- let scanned=0,rejected=0;
- for(const item of seen.values()){
-   const msg=await gmailRequest("/messages/"+encodeURIComponent(item.id)+"?format=full");
-   const subject=header(msg.payload,"subject"),from=header(msg.payload,"from");
-   const date=msg.internalDate?new Date(Number(msg.internalDate)).toISOString():new Date().toISOString();
-   const matches=classifyMail({id:msg.id,subject,from,date,snippet:msg.snippet||"",
-     body:extractPlain(msg.payload),labels:msg.labelIds||[]},email);
-   if(matches.length)candidates.push(...matches);else rejected++;
-   scanned++;options.onProgress?.(scanned);
- }
- return {email,messages_scanned:scanned,candidates,limited,rejected,search_matches:seen.size};
+  const email=await getConnectedGmail();
+  if(!email)throw Error("Connect Google account first.");
+  if(options.expectedEmail&&normal(options.expectedEmail)!==email)
+    throw Error("Gmail mailbox does not match requested account. No messages were read.");
+  const scan_started_at=new Date().toISOString();
+  // Trust Google's actual mailbox identity, NOT just the Google sign-in email.
+  const profile=await gmailRequest("/profile");
+  if(normal(profile.emailAddress)!==email)
+    throw Error("Gmail profile mismatch. Account switching was not completed.");
+  const limit=Math.min(250,Math.max(1,options.limit||120));
+  const queries=buildGmailQueries(options.days??7,options.kinds);
+  if(!queries.length)throw Error("Select at least one category.");
+  const seen=new Map<string,{id:string}>();
+  let limited=false;
+  // Reserve query capacity per category so newsletters or receipt volume
+  // cannot prevent account or promo matches from ever being inspected.
+  const perCategory=Math.max(10,Math.floor(limit/queries.length));
+  for(const {q} of queries){
+    let pageToken:string|undefined,categoryChecked=0;
+    do{
+      if(categoryChecked>=perCategory){limited=true;break;}
+      const response=await gmailRequest(urlQuery("/messages",{
+        q,maxResults:Math.min(100,perCategory-categoryChecked),...(pageToken?{pageToken}:{})
+      }));
+      const messages=response.messages||[];
+      categoryChecked+=messages.length;
+      for(const msg of messages)if(msg.id&&!seen.has(msg.id))seen.set(msg.id,msg);
+      pageToken=response.nextPageToken;
+      if(pageToken&&categoryChecked>=perCategory)limited=true;
+    }while(pageToken&&categoryChecked<perCategory);
+  }
+  const candidates:MailCandidate[]=[];
+  let scanned=0,rejected=0;
+  for(const item of seen.values()){
+    const msg=await gmailRequest("/messages/"+encodeURIComponent(item.id)+"?format=full");
+    const subject=header(msg.payload,"subject"),from=header(msg.payload,"from");
+    const date=msg.internalDate?new Date(Number(msg.internalDate)).toISOString():scan_started_at;
+    const matches=classifyMail({id:msg.id,subject,from,date,snippet:msg.snippet||"",
+      body:extractPlain(msg.payload),labels:msg.labelIds||[]},email);
+    if(matches.length)candidates.push(...matches);
+    else rejected++;
+    scanned++;options.onProgress?.(scanned);
+  }
+  return {email,messages_scanned:scanned,candidates,limited,rejected,
+    search_matches:seen.size,scan_started_at};
 }

@@ -16,9 +16,9 @@ function daysUntil(value:any):number|null {
  const d=new Date();return Math.round((t-Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);
 }
 function nextDate(s:any):any{
- if(s.status==="Trial")return s.trial_end||s.renewal_date;
+ if(s.status==="Trial")return s.trial_end||s.renewal_date||s.access_end;
  if(s.auto_renew===false||["Cancelled","Expired"].includes(s.status))return s.access_end||null;
- return s.renewal_date||null;
+ return s.renewal_date||s.access_end||s.expiry_date||null;
 }
 export default function Subscriptions() {
  const router=useRouter(),insets=useSafeAreaInsets();

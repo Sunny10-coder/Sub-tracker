@@ -5,6 +5,8 @@
 import { storage } from "@/src/utils/storage";
 import { classifyLink, canonicalUrl, graphFromVault, inferCategory, inferTags } from "@/src/lib/vault-intelligence";
 import { MIN_CONFIDENCE, CLASSIFIER_VERSION } from "@/src/lib/gmail-classifier";
+import { applyMailCandidate } from "@/src/lib/mail-reconciliation";
+import type { MailCandidate } from "@/src/lib/gmail-classifier";
 
 export const LOCAL_VAULT_KEY = "submind.private.import.v1";
 type Dict = Record<string, any>;
@@ -119,15 +121,16 @@ function futureDays(d:any):number|null{const t=isoDay(d);if(t===null)return null
  return Math.round((t-today)/86400000)}
 function dueDate(s:Dict):string|null{
  if(s.status==="Cancelled"||s.auto_renew===false)return s.access_end||s.trial_end||null;
- return s.status==="Trial"?(s.trial_end||s.renewal_date||null):(s.renewal_date||null);
+ return s.status==="Trial"?(s.trial_end||s.renewal_date||s.access_end||null):(s.renewal_date||s.access_end||s.expiry_date||null);
 }
 function charge(s:Dict):number|null{
  if(!["Active","Trial"].includes(s.status)||s.auto_renew===false||s.review_required===true)return null;
  if(s.status==="Trial"&&s.trial_paid!==true)return null;
+ if(s.source==="gmail"&&s.auto_detected===true&&s.payment_confirmed!==true)return null;
  if(s.price===null||s.price===undefined||!Number.isFinite(Number(s.price)))return null;
  const cost=Number(s.price);if(cost<0)return null;
  switch(String(s.billing_cycle||"").toLowerCase()){
-  case "monthly":return cost;case "yearly":return cost/12;case "weekly":return cost*52/12;default:return null;
+  case "monthly":return cost;case "yearly":return cost/12;case "weekly":return cost*52/12;case "daily":return cost*365/12;default:return null;
  }
 }
 export function localInsights(v:Vault):Dict{
@@ -228,6 +231,29 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       Object.assign(rec,data,{updated_at:nowIso()});result=rec;
    }else if(route.startsWith("/prompts/")&&method==="DELETE"){
       v.prompts=v.prompts.filter(x=>x.id!==route.split("/")[2]);result={ok:true};
+   }else if(route==="/mail/smart-sync"&&method==="POST"){
+      const mailbox=string(data.mailbox).toLowerCase();
+      const candidates=asArray(data.records);
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailbox)||candidates.length>400)
+        throw Error("Invalid mailbox or too many email findings");
+      const summary={added:0,updated:0,duplicate:0,review:0,ignored:0};
+      const now=nowIso();
+      for(const item of candidates){
+        const decision=applyMailCandidate(v,item as MailCandidate,mailbox,now,uid);
+        summary[decision.decision]++;
+      }
+      const current=v.mailboxes.find(x=>string(x.email).toLowerCase()===mailbox);
+      if(current){
+        current.last_synced_at=now;
+        current.last_scan_count=Number(data.messages_scanned)||candidates.length;
+        current.last_scan_days=Number(data.days)||7;
+        current.last_scan_limited=data.limited===true;
+      }else v.mailboxes.push({
+        id:"mailbox-"+normalized(mailbox),email:mailbox,last_synced_at:now,
+        last_scan_count:Number(data.messages_scanned)||candidates.length,
+        last_scan_days:Number(data.days)||7,last_scan_limited:data.limited===true
+      });
+      result={...summary,mailbox,review_pending:v.review_queue.filter(x=>x.status==="needs_review").length};
    }else if(route==="/mail/auto-sync"&&method==="POST"){
       const mailbox=string(data.mailbox).toLowerCase();
       const rows=asArray(data.records);
@@ -363,40 +389,28 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
         ||(Number(x.classifier_version)===CLASSIFIER_VERSION&&Number(x.confidence)>=MIN_CONFIDENCE));
       result={removed:before-v.review_queue.length,preserved: v.review_queue.length};
    }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
-      const id=route.split("/")[2];const entry=v.review_queue.find(x=>x.id===id);
+      const id=route.split("/")[2];
+      const entry=v.review_queue.find(x=>x.id===id);
       if(!entry)notFound();
-      if(entry.status!=="needs_review")throw Error("This record was already reviewed");
+      if(entry.status!=="needs_review")throw Error("This finding was already reviewed");
       const action=string(data.action);
       if(action!=="approve"&&action!=="dismiss")throw Error("Choose approve or dismiss");
-      entry.status=action==="approve"?"approved":"dismissed";
-      entry.reviewed_at=nowIso();
-      if(action==="approve"){
-        const rec={...(entry.extraction||{}),...(data.edits||{})};const email=string(rec.account_email||entry.mailbox_email).toLowerCase();
-        if(entry.type==="account"){
-          if(rec.provider&&!v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&string(a.email)===email)){
-            v.accounts.unshift(normalizeAccount({provider:rec.provider,email,status:"Created",source:"gmail",source_key:entry.source_key,id:"acct-"+uid()}));
-          }
-        }else if(entry.type==="subscription"){
-          if(rec.provider&&!v.subscriptions.some(s=>normalized(s.provider)===normalized(rec.provider)&&string(s.account_email)===email&&normalized(s.plan)===normalized(rec.plan))){
-            const sub=normalizeSub({...rec,account_email:email,source:"gmail",status:rec.trial_end?"Trial":"Unknown",
-              review_required:true,id:"sub-"+uid()});
-            v.subscriptions.unshift(sub);
-          }
-          if(rec.provider&&email&&!v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&string(a.email)===email)){
-            v.accounts.unshift(normalizeAccount({provider:rec.provider,email,status:"Created",source:"gmail",id:"acct-"+uid()}));
-          }
-        }else if(entry.type==="promo"){
-          const code=string(rec.code);
-          if(rec.provider&&!v.promo_codes.some(p=>normalized(p.provider)===normalized(rec.provider)&&normalized(p.code)===normalized(code)&&string(p.source_key)===entry.source_key)){
-            v.promo_codes.unshift(normalizePromo({...rec,source:"gmail",source_key:entry.source_key,
-              account_email:email,id:"promo-"+uid(),verified:false}));
-          }
-        }
+      if(action==="dismiss"){
+        entry.status="dismissed";entry.reviewed_at=nowIso();
+        v.mail_activity.unshift({id:"review-"+uid(),source_key:entry.source_key,
+          action:"approved_v3",decision:"dismissed",recorded_at:nowIso()});
+        result={ok:true,status:entry.status};
+      }else{
+        const updated={...entry,extraction:{...(entry.extraction||{}),...(data.edits||{})},
+          confidence:1,classifier_version:CLASSIFIER_VERSION};
+        // Approval resolves uncertainty but still reconciles against the
+        // provider/account/plan rather than creating a second app record.
+        const outcome=applyMailCandidate(v,updated as MailCandidate,
+          string(entry.mailbox_email),nowIso(),uid,true);
+        if(outcome.decision==="ignored")throw Error("Review could not be saved. Check provider and mailbox.");
+        entry.status="approved";entry.reviewed_at=nowIso();
+        result={ok:true,status:entry.status,record_id:outcome.record_id};
       }
-      v.mail_activity.unshift({id:"mail-action-"+uid(),source_key:entry.source_key,
-        type:entry.type,mailbox_email:entry.mailbox_email,provider:entry.extraction?.provider,
-        action,recorded_at:nowIso()});
-      result={ok:true,status:entry.status};
    }else if(route==="/promo/sources"&&method==="POST"){
       const provider=string(data.provider).slice(0,100);
       const keywords=string(data.keywords).slice(0,150);

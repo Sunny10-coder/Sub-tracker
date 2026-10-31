@@ -12,9 +12,17 @@ export default function MailReview() {
   const {data:queue=[],isFetching,refetch}=useReviewQueue();
   const invalidate=useInvalidateAll();
   const [tab,setTab]=useState("All");
+  const [range,setRange]=useState<"today"|"week"|"all">("week");
   const [edits,setEdits]=useState<Record<string,Record<string,string>>>({});
   const [working,setWorking]=useState("");
-  const rows=queue.filter((e:any)=>tab==="All"||e.type===tab);
+  const now=Date.now();
+  const rows=queue.filter((e:any)=>{
+    if(tab!=="All"&&e.type!==tab)return false;
+    if(range==="all")return true;
+    const stamp=Date.parse(e.source_date||e.created_at||"");
+    if(!Number.isFinite(stamp))return false;
+    return range==="today"?now-stamp<=86400000:now-stamp<=7*86400000;
+  }).sort((a:any,b:any)=>String(b.source_date||b.created_at).localeCompare(String(a.source_date||a.created_at)));
   const set=(id:string,field:string,value:string)=>setEdits(prev=>({...prev,[id]:{...prev[id],[field]:value}}));
   const take=async (item:any,action:"approve"|"dismiss")=>{
     setWorking(item.id);
@@ -38,7 +46,14 @@ export default function MailReview() {
       <Pressable onPress={()=>router.back()} style={{flexDirection:"row",alignItems:"center",gap:10}}>
         <Icon name="arrow-left" color={METRO.white} size={25}/><MetroBrand word="REVIEW"/>
       </Pressable>
-      <Text style={{color:METRO.dim,fontSize:13,lineHeight:20}}>Approve only genuine records. SubMind never assumes that a receipt proves an active subscription or that a promotional email contains a valid coupon.</Text>
+      <Text style={{color:METRO.dim,fontSize:13,lineHeight:20}}>Clear evidence is saved automatically. Only doubtful billing, conflicting prices, uncertain account creation and promotions without a reliable code appear here. Review whenever you are free.</Text>
+      <View style={{flexDirection:"row",gap:8}}>
+        {([{id:"today",name:"TODAY"},{id:"week",name:"LAST 7 DAYS"},{id:"all",name:"ALL HISTORY"}] as const).map(x=>
+        <Pressable key={x.id} onPress={()=>setRange(x.id)} style={{flex:1,
+          backgroundColor:range===x.id?METRO.purple:"#2A2C3C",borderRadius:8,padding:12,alignItems:"center"}}>
+          <Text style={{color:METRO.white,fontWeight:"900",fontSize:11}}>{x.name}</Text>
+        </Pressable>)}
+      </View>
       <View style={{flexDirection:"row",gap:5}}>
         {TABS.map(s=><Pressable key={s} onPress={()=>setTab(s)} style={{flex:1,backgroundColor:tab===s?METRO.cyan:"#24242D",padding:11,borderRadius:7,alignItems:"center"}}>
           <Text numberOfLines={1} style={{color:tab===s?METRO.ink:METRO.white,fontSize:11,fontWeight:"800"}}>{s==="All"?"ALL":s==="subscription"?"PLANS":s==="account"?"ACCOUNTS":"PROMOS"}</Text>
@@ -48,9 +63,15 @@ export default function MailReview() {
       {!rows.length?<View style={{padding:26,borderWidth:1,borderColor:"#353543",borderRadius:12,alignItems:"center",gap:12}}>
         <Icon name="check-decagram-outline" size={37} color={METRO.green}/>
         <Text style={{color:METRO.dim}}>Nothing needs review. Scan Gmail or save a link to add more data.</Text>
-      </View>:rows.map((item:any)=>{
+      </View>:rows.map((item:any,index:number)=>{
         const c=item.extraction||{};const accent=item.type==="promo"?METRO.purple:item.type==="account"?METRO.cyan:METRO.orange;
-        return <View key={item.id} style={{backgroundColor:"#181820",borderRadius:14,borderWidth:1,borderColor:"#343440",overflow:"hidden"}}>
+        const date=String(item.source_date||item.created_at||"").slice(0,10);
+        const previous=String(rows[index-1]?.source_date||rows[index-1]?.created_at||"").slice(0,10);
+        return <View key={item.id} style={{gap:9}}>
+         {index===0||date!==previous?<View style={{backgroundColor:"#20263A",padding:11,borderRadius:9}}>
+           <Text style={{color:METRO.cyan,fontSize:12,fontWeight:"900"}}>{date||"DATE UNKNOWN"}</Text>
+         </View>:null}
+         <View style={{backgroundColor:"#181820",borderRadius:14,borderWidth:1,borderColor:"#343440",overflow:"hidden"}}>
           <View style={{height:5,backgroundColor:accent}}/>
           <View style={{padding:16,gap:11}}>
             <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between"}}>
@@ -79,6 +100,7 @@ export default function MailReview() {
               </Pressable>
             </View>
           </View>
+         </View>
         </View>;
       })}
     </ScrollView>

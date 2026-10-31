@@ -51,8 +51,8 @@ export function senderInfo(from:string):{provider:string;domain:string;address:s
  }
  return {provider,domain,address};
 }
-const SUB_STRONG=/\b(?:subscription (?:confirmation|confirmed|renewal|renewed|activated|started|is active|will renew|expires|expiring|cancelled)|your subscription (?:is|has|will)|renewal (?:notice|reminder|confirmation|successful|upcoming)|upcoming renewal|automatic renewal|auto[- ]renewal|(?:monthly|yearly|annual) (?:subscription|membership|plan)|(?:your )?(?:free )?trial (?:has )?(?:started|activated|ends|expires|ending|will end)|your (?:membership|plan) (?:is active|has renewed|was activated)|next billing date)\b/i;
-const RECEIPT=/\b(?:invoice|receipt|payment received|payment confirmed|your payment|payment successful|billing statement|charge successful)\b/i;
+const SUB_STRONG=/\b(?:subscription (?:confirmation|confirmed|renewal|renewed|activated|started|is active|will renew|expires|expiring|cancelled)|your subscription (?:is|has|will)|renewal (?:notice|reminder|confirmation|successful|upcoming)|upcoming renewal|automatic renewal|auto[- ]renewal|(?:monthly|yearly|annual) (?:subscription|membership|plan)|(?:your )?(?:free )?trial (?:has )?(?:started|activated|ends|expires|ending|will end)|(?:your )?(?:membership|plan) (?:is active|has renewed|was activated|activated|renewed|expired|cancelled)|next billing date)\b/i;
+const RECEIPT=/\b(?:invoice|receipt|payment received|payment confirmed|your payment|payment successful|billing statement|charge successful|charged for your subscription|payment completed)\b/i;
 const RECURRING=/\b(?:subscription (?:plan|renewal|payment|billing|activated|renewed)|renewal|recurring|auto[- ]?renew|(?:monthly|annual|yearly|weekly|daily) (?:plan|membership|subscription|billing|charge)|next billing date|next payment date|plan (?:name|renews))\b/i;
 const ACCOUNT=/\b(?:welcome to|(?:your |new )?account (?:has been )?(?:created|activated|registered)|registration (?:completed|confirmed|successful)|(?:confirm|verify|activate) (?:your )?(?:account|email address|email|registration)|thanks for (?:joining|registering|signing up)|sign[- ]?up (?:confirmed|complete))\b/i;
 const ACCOUNT_CONTEXT=/\b(?:account|registration|sign[- ]?up|sign in to your account|log in to your account|complete your registration|set your password)\b/i;
@@ -74,7 +74,7 @@ function dateNear(source:string,marker:RegExp):string|null{
 }
 function moneyNear(s:string):{price:number|null;currency:string|null}{
  // A standalone number from a shopping email must never become a recurring fee.
- const m=s.match(/(?:total (?:paid|charged|due)|amount (?:paid|due|charged)|(?:monthly|annual|yearly|renewal|subscription|plan) (?:charge|price|cost|fee)|you (?:paid|were charged)|billed)\s*(?::|is|of)?\s*(USD|AED|EUR|GBP|INR|US\$|A\$|\$|€|£|₹)\s*([\d,]+(?:\.\d{1,2})?)/i);
+ const m=s.match(/(?:total (?:paid|charged|due)|amount (?:paid|due|charged)|(?:monthly|annual|yearly|renewal|subscription|plan) (?:billing|charge|price|cost|fee)|you (?:paid|were charged)|billed)\s*(?::|is|of)?\s*(USD|AED|EUR|GBP|INR|US\$|A\$|\$|€|£|₹)\s*([\d,]+(?:\.\d{1,2})?)/i);
  if(!m)return {price:null,currency:null};
  const n=Number(m[2].replace(/,/g,""));if(!Number.isFinite(n)||n<0||n>1000000)return {price:null,currency:null};
  const token=m[1].toUpperCase(),symbols:Record<string,string>={"$":"USD","US$":"USD","A$":"AUD","€":"EUR","£":"GBP","₹":"INR"};
@@ -118,11 +118,22 @@ export function classifyMail(message:MailMessage,mailbox:string):MailCandidate[]
  if(strong||invoice){
   const renewal=dateNear(relevant,/\b(?:next (?:billing|payment|charge|renewal) (?:date)?|subscription renews?|renewal date)\b/i);
   const trialEnd=dateNear(relevant,/\b(?:trial (?:ends?|expires?|ending)|free trial ends?)\b/i);
-  const money=moneyNear(relevant);
-  return [{...common,type:"subscription",confidence:strong?0.93:0.86,
+  const amount=moneyNear(relevant);
+  const paymentConfirmed=invoice && amount.price!==null && !!amount.currency &&
+    /(?:payment (?:received|confirmed|successful|completed)|receipt|charged for your subscription|invoice paid)/i.test(subject);
+  const eventType=/(?:subscription|plan|membership)\s+(?:has been |was |is now )?(?:cancelled|canceled)/i.test(subject)?"cancelled":
+    /(?:subscription|plan|membership)\s+(?:has |has been |is now )?(?:expired|ended)/i.test(subject)?"expired":
+    /(?:free )?trial\s+(?:has )?(?:started|activated|begun)/i.test(subject)?"trial_started":
+    /(?:free )?trial\s+(?:ends?|expires?|ending|will end)/i.test(subject)?"trial_ending":
+    /(?:subscription|plan|membership)\s+(?:has been |was |is now )?(?:activated|started|is active)|subscription confirmation|plan activated/i.test(subject)?"activated":
+    /(?:subscription|membership|plan)\s+(?:has )?(?:renewed|was renewed)|renewal\s+(?:confirmed|successful|completed)/i.test(subject)?"renewed":
+    paymentConfirmed?"payment":/(?:upcoming renewal|renewal reminder|renewal notice|next billing date|will renew)/i.test(subject)?"renewal_notice":"unknown";
+  return [{...common,type:"subscription",confidence:paymentConfirmed?0.96:strong?0.93:0.86,
    evidence:[strong?"Subscription, trial or renewal event stated in subject":"Receipt plus recurring-billing terms near email start"],
-   extraction:{provider:sender.provider,product:sender.provider,plan:planFrom(relevant),price:money.price,currency:money.currency,
-    billing_cycle:billingCycle(relevant),renewal_date:renewal,trial_end:trialEnd,account_email:email,
+   extraction:{provider:sender.provider,product:sender.provider,plan:planFrom(relevant),price:amount.price,currency:amount.currency,
+    billing_cycle:billingCycle(relevant),renewal_date:renewal,trial_end:trialEnd,
+    expiry_date:dateNear(relevant,/\b(?:subscription expires?|plan expires?|access ends?|membership expires?|valid until)\b/i),
+    event_type:eventType,payment_confirmed:paymentConfirmed,account_email:email,
     status:"Unknown",auto_renew:null,review_required:true,source:"gmail",subject}}];
  }
  if(account){

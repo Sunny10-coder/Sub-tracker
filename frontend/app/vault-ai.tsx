@@ -28,7 +28,7 @@ export default function VaultAI() {
  useFocusEffect(useCallback(()=>{
    let visible=true;
    autoSyncGmailOnLaunch().then(result=>{
-     if(visible&&!result.skipped){accounts.refetch();subs.refetch();promos.refetch();mailboxes.refetch();}
+     if(visible&&result.results.some(x=>x.status==="scanned")){accounts.refetch();subs.refetch();promos.refetch();mailboxes.refetch();}
    });
    return()=>{visible=false};
  },[]));

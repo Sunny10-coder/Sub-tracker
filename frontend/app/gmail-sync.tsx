@@ -1,111 +1,159 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { METRO, MetroBrand, MetroTile } from "@/src/components/metro-tiles";
+import { METRO, MetroBrand } from "@/src/components/metro-tiles";
 import { Icon } from "@/src/components/ui";
-import { api, useInvalidateAll, useMailboxes } from "@/src/lib/api";
-import { connectGmail, disconnectGmail, getConnectedGmail, scanConnectedGmail } from "@/src/lib/gmail-sync";
-import type { MailType } from "@/src/lib/gmail-classifier";
+import { useInvalidateAll, useMailboxes, useReviewQueue } from "@/src/lib/api";
+import { connectGmail, disconnectGmail, forgetMailbox, getConnectedGmail, getRegisteredMailboxes } from "@/src/lib/gmail-sync";
+import { autoSyncGmailOnLaunch, lastGmailScan, type SyncReport } from "@/src/lib/automatic-mail-sync";
 
-export default function GmailSync() {
-  const router = useRouter();const insets = useSafeAreaInsets();
-  const [connected, setConnected] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [notice, setNotice] = useState("Sign in to Gmail to scan only the messages relevant to your accounts, billing and offers.");
-  const [days] = useState(180);
-  const alreadyScanned=useRef("");
-  const [kinds] = useState<MailType[]>(["subscription","account","promo"]);
-  const {data:mailboxes=[]} = useMailboxes();
-
-  const invalidate = useInvalidateAll();
-  useEffect(() => { getConnectedGmail().then(setConnected).catch(() => setConnected(null)); }, []);
-  const login = async (switchAccount=false) => {
-    setBusy(true);
-    try {
-      const email = await connectGmail(switchAccount);
-      setConnected(email);setNotice("Connected to " + email + ". Tap Scan Gmail to import candidates for review.");
-    } catch (e:any) { Alert.alert("Google sign-in", e.message || String(e)); }
-    finally { setBusy(false); }
-  };
-  const cleanup = () => Alert.alert("Remove old irrelevant Gmail suggestions?",
-    "This removes unreviewed suggestions from the previous broad Gmail parser. Approved accounts, subscriptions, promotions and your original emails remain untouched.",[
-    {text:"Cancel",style:"cancel"},
-    {text:"Remove old suggestions",style:"destructive",onPress:async()=>{
-      try{const result=await api.cleanupLegacyMail();invalidate();setNotice(result.removed+" old unreviewed suggestions cleared. Your approved records were preserved.");}
-      catch(e:any){Alert.alert("Cleanup failed",e.message||String(e))}
-    }}
-  ]);
-  const logout = () => Alert.alert("Disconnect Gmail?", "SubMind will stop reading this account. Previously approved records remain on this phone.", [
-    {text:"Cancel",style:"cancel"}, {text:"Disconnect",onPress:async()=>{try{await disconnectGmail();setConnected(null);}catch(e:any){Alert.alert("Sign out failed",e.message)}}},
-  ]);
-  const scan = async () => {
-    if(!connected)return;
-    setBusy(true);setProgress(0);setNotice("Reading matching Gmail messages on this phone…");
-    try {
-      const result=await scanConnectedGmail({days,limit:days>=730?200:120,kinds,onProgress:setProgress});
-      const imported=await api.autoSyncMail(result.email,result.candidates);
-      invalidate();
-      setNotice("Auto-organised: "+imported.accountsAdded+" accounts, "+imported.subscriptionsAdded+" subscriptions and "+imported.promosAdded+" promotions. "+imported.updated+" records updated, "+result.rejected+" unrelated emails ignored. No review required."
-        +(result.limited?" Scan limit reached. Choose an older range or repeat when needed.":""));
-    } catch (e:any) { Alert.alert("Gmail scan failed",e.message || String(e));setNotice("Scan incomplete. No unapproved records were automatically made active."); }
-    finally { setBusy(false); }
-  };
-  useEffect(()=>{
-    if(!connected||alreadyScanned.current===connected)return;
-    alreadyScanned.current=connected;
-    scan();
-  },[connected]);
-  const card: any = {padding:17,backgroundColor:"#17171D",borderRadius:14,borderWidth:1,borderColor:"#30303D",gap:12};
-  const txt: any = {color:METRO.white};
-  return <View style={{flex:1,backgroundColor:METRO.black}}>
-    <ScrollView contentContainerStyle={{paddingTop:insets.top+14,paddingHorizontal:18,paddingBottom:insets.bottom+90,gap:15}}>
-      <Pressable onPress={()=>router.back()} style={{flexDirection:"row",alignItems:"center",gap:10,marginBottom:3}}>
-        <Icon name="arrow-left" color={METRO.white} size={25}/><MetroBrand word="GMAIL"/>
-      </Pressable>
-      <Text style={{color:METRO.dim,fontSize:13,lineHeight:19}}>Read-only Google access. Your original emails are never uploaded to SubMind servers; extracted fields are stored on this phone.</Text>
-      <View style={card}>
-        <View style={{flexDirection:"row",alignItems:"center",gap:12}}>
-          <View style={{backgroundColor:"#E94A48",padding:12,borderRadius:12}}><Icon name="gmail" size={27} color="#FFFFFF"/></View>
-          <View style={{flex:1}}>
-            <Text style={{color:METRO.white,fontSize:19,fontWeight:"900"}}>{connected?"CONNECTED MAILBOX":"CONNECT YOUR MAILBOX"}</Text>
-            <Text style={{color:METRO.dim,marginTop:4,fontSize:13}}>{connected||"No Google account connected"}</Text>
+const card:any={padding:16,backgroundColor:"#1B1D29",borderRadius:15,borderWidth:1,borderColor:"#333849",gap:12};
+const muted:any={color:"#9FAEC0",fontSize:12,lineHeight:19};
+const button=(color:string):any=>({padding:14,borderRadius:10,backgroundColor:color,
+ flexDirection:"row",alignItems:"center",justifyContent:"center",gap:8});
+export default function GmailSync(){
+ const router=useRouter(),insets=useSafeAreaInsets(),invalidate=useInvalidateAll();
+ const [registered,setRegistered]=useState<string[]>([]);
+ const [active,setActive]=useState<string|null>(null);
+ const [busy,setBusy]=useState(false);
+ const [progress,setProgress]=useState<{email:string;count:number}|null>(null);
+ const [status,setStatus]=useState<SyncReport|null>(null);
+ const [notice,setNotice]=useState("SubMind checks your authorised Gmail accounts when the app is open. No sorting or approving required for clear evidence.");
+ const [lastSeen,setLastSeen]=useState<Record<string,number>>({});
+ const {data:mailboxes=[]}=useMailboxes();
+ const {data:review=[]}=useReviewQueue();
+ const refresh=async()=>{
+   const [list,email]=await Promise.all([getRegisteredMailboxes(),getConnectedGmail().catch(()=>null)]);
+   setRegistered(list);setActive(email);const times:Record<string,number>={};
+   for(const address of list)times[address]=await lastGmailScan(address);
+   setLastSeen(times);
+ };
+ const run=async(options:{force?:boolean;one?:string;initialDays?:number}={})=>{
+   setBusy(true);setProgress(null);
+   try{
+     const report=await autoSyncGmailOnLaunch({...options,
+       onProgress:(email,count)=>setProgress({email,count})});
+     setStatus(report);
+     const totals=report.results.reduce((a,x)=>({
+       added:a.added+x.added,updated:a.updated+x.updated,
+       review:a.review+x.review
+     }),{added:0,updated:0,review:0});
+     setNotice(totals.added+" added · "+totals.updated+" updated · "+
+       totals.review+" doubtful for later review. No duplicate subscriptions created.");
+     invalidate();await refresh();
+   }catch(e:any){setNotice("Could not finish Gmail sync: "+String(e?.message||e));}
+   finally{setBusy(false);setProgress(null)}
+ };
+ useEffect(()=>{
+   let live=true;
+   Promise.all([getRegisteredMailboxes(),getConnectedGmail().catch(()=>null)]).then(async([list,email])=>{
+     if(!live)return;
+     setRegistered(list);setActive(email);
+     if(email||list.length)await run();
+   }).catch(e=>{if(live)setNotice(String(e?.message||e))});
+   return()=>{live=false};
+ },[]);
+ const add=async()=>{
+   setBusy(true);
+   try{
+     const email=await connectGmail(true);
+     await refresh();
+     setNotice(email+" authorised. Scanning the most recent seven days.");
+     await run({one:email,force:true,initialDays:7});
+   }catch(e:any){Alert.alert("Connect Gmail",String(e?.message||e));}
+   finally{setBusy(false)}
+ };
+ const remove=(email:string)=>Alert.alert("Stop scanning "+email+"?",
+   "SubMind will stop future scans of this account. It will not delete your saved subscriptions, promotional codes or email messages.",
+   [{text:"Cancel",style:"cancel"},{text:"Remove from sync",style:"destructive",
+     onPress:async()=>{try{
+       await forgetMailbox(email);
+       if(active===email)await disconnectGmail();
+       await refresh();setStatus(null);
+     }catch(e:any){Alert.alert("Could not remove mailbox",String(e?.message||e))}}}]);
+ const list=registered.length?registered:active?[active]:[];
+ return <View style={{flex:1,backgroundColor:METRO.black}}>
+  <ScrollView contentContainerStyle={{paddingTop:insets.top+12,paddingHorizontal:15,
+    paddingBottom:insets.bottom+85,gap:13}}>
+    <Pressable onPress={()=>router.back()} style={{flexDirection:"row",alignItems:"center",gap:9}}>
+      <Icon name="arrow-left" size={26} color={METRO.white}/>
+      <MetroBrand word="GMAIL SYNC"/>
+    </Pressable>
+    <Text style={muted}>Read-only Gmail permission. Message content is classified on your phone; saved results are kept in SubMind's private local vault.</Text>
+    <View style={{...card,backgroundColor:"#19273A",borderColor:"#34557C"}}>
+      <Text style={{color:METRO.white,fontWeight:"900",fontSize:24}}>THREE MAILBOXES. ONE VAULT.</Text>
+      <Text style={{color:METRO.dim,fontSize:13,lineHeight:20}}>Authorise each address once. SubMind attempts to scan all three sequentially and verifies the Google identity before reading any message.</Text>
+      <View style={{flexDirection:"row",gap:9}}>
+        {[0,1,2].map(i=><View key={i} style={{height:8,flex:1,borderRadius:5,
+          backgroundColor:i<registered.length?METRO.green:"#475269"}}/>)}
+      </View>
+      <Text style={{color:METRO.cyan,fontWeight:"900",fontSize:15}}>{registered.length} / 3 registered Google accounts</Text>
+      {registered.length<3?<Pressable disabled={busy} onPress={add} style={button(METRO.cyan)}>
+        <Icon name="plus" size={22} color={METRO.ink}/>
+        <Text style={{color:METRO.ink,fontWeight:"900"}}>{registered.length?"AUTHORISE ANOTHER GMAIL":"AUTHORISE FIRST GMAIL"}</Text>
+      </Pressable>:null}
+    </View>
+    {list.map(email=>{
+      const info=mailboxes.find((m:any)=>String(m.email).toLowerCase()===email);
+      const latest=status?.results.find(x=>x.email===email);
+      const previous=lastSeen[email]||0;
+      return <View key={email} style={card}>
+        <View style={{flexDirection:"row",alignItems:"center",gap:11}}>
+          <Icon name="gmail" color="#F4888C" size={25}/>
+          <View style={{flex:1,gap:3}}>
+            <Text style={{color:METRO.white,fontWeight:"900",fontSize:14}}>{email}</Text>
+            <Text style={muted}>Last complete scan: {previous?new Date(previous).toLocaleString():"Not yet completed"}</Text>
           </View>
+          <Pressable onPress={()=>remove(email)} accessibilityLabel={"Remove "+email} disabled={busy}>
+            <Icon name="close-circle-outline" color="#BDA5AD" size={22}/>
+          </Pressable>
         </View>
-        {!connected ?
-          <Pressable disabled={busy} onPress={()=>login(false)} style={{backgroundColor:METRO.cyan,padding:14,borderRadius:8,alignItems:"center"}}>
-            <Text style={{color:METRO.ink,fontWeight:"900"}}>CONNECT GOOGLE ACCOUNT</Text>
-          </Pressable> :
-          <View style={{flexDirection:"row",gap:10}}>
-            <Pressable disabled={busy} onPress={()=>login(true)} style={{flex:1,borderWidth:1,borderColor:METRO.cyan,padding:12,alignItems:"center",borderRadius:8}}>
-              <Text style={{color:METRO.cyan,fontWeight:"800"}}>SWITCH ACCOUNT</Text>
-            </Pressable>
-            <Pressable disabled={busy} onPress={logout} style={{padding:12,borderWidth:1,borderColor:"#63636B",borderRadius:8}}>
-              <Text style={txt}>DISCONNECT</Text>
-            </Pressable>
-          </View>}
-      </View>
-      <View style={card}>
-        <Text style={{...txt,fontSize:18,fontWeight:"900"}}>SCAN SUBSCRIPTIONS & OFFERS</Text>
-        <Text style={{color:METRO.dim,fontSize:12,lineHeight:19}}>Automatic precision mode: checks transactional evidence and ignores newsletters, routine receipts, login codes and incidental marketing text. Strong matches go directly into their correct vault.</Text>
-        <Text style={{color:METRO.dim,fontSize:12}}>All three categories are scanned automatically after you connect Gmail or open this screen. No selections or review steps required.</Text>
-        <Pressable disabled={!connected||busy||!kinds.length} onPress={scan} style={{backgroundColor:!connected||busy?"#39434A":METRO.green,padding:16,alignItems:"center",borderRadius:8,flexDirection:"row",justifyContent:"center",gap:10}}>
-          {busy ? <ActivityIndicator color={METRO.white}/> : <Icon name="magnify-scan" color={METRO.white} size={24}/>}
-          <Text style={{color:METRO.white,fontWeight:"900"}}>{busy?"READING "+progress+" MESSAGES":"SCAN AGAIN"}</Text>
+        <Text style={{color:latest?.status==="error"||latest?.status==="needs_authorisation"?METRO.orange:METRO.green,
+          fontWeight:"800",fontSize:12}}>
+          {latest?latest.status==="needs_authorisation"?"Reconnect needed · tap Authorise another Gmail and choose this account":
+           latest.message:info?.last_synced_at?"Stored scan history available":"Awaiting first scan"}
+        </Text>
+        {latest&&latest.status==="scanned"?<Text style={muted}>
+          {latest.scanned} checked · {latest.added} added · {latest.updated} updated · {latest.review} for review
+        </Text>:null}
+        <Pressable disabled={busy} onPress={async()=>{
+          try{const selected=await connectGmail(true);await refresh();
+            if(selected!==email){setNotice("You selected "+selected+". Choose "+email+" to reconnect this mailbox.");return;}
+            await run({one:email,force:true,initialDays:7});
+          }catch(e:any){Alert.alert("Gmail access",String(e?.message||e))}
+        }} style={{alignSelf:"flex-start",padding:8}}>
+          <Text style={{color:METRO.cyan,fontSize:11,fontWeight:"900"}}>RECONNECT / SCAN THIS ACCOUNT</Text>
         </Pressable>
-        <Text style={{color:METRO.dim,fontSize:13,lineHeight:20}}>{notice}</Text>
+      </View>;
+    })}
+    <View style={card}>
+      <Text style={{color:METRO.white,fontWeight:"900",fontSize:19}}>DAILY INTELLIGENCE</Text>
+      <Text style={muted}>By default SubMind scans the last 7 days, once daily per authorised mailbox while the app is running. Overlap catches delayed emails and message IDs prevent duplication. After an extended absence it checks up to 30 days.</Text>
+      <View style={{flexDirection:"row",gap:9}}>
+        <Pressable disabled={busy||!registered.length} onPress={()=>run({force:true,initialDays:7})}
+          style={{...button(METRO.green),flex:1}}>
+          {busy?<ActivityIndicator color={METRO.white}/>:<Icon name="refresh" color={METRO.white}/>}
+          <Text style={{color:METRO.white,fontWeight:"900",fontSize:12}}>{busy?"SCANNING":"SCAN 7 DAYS"}</Text>
+        </Pressable>
+        <Pressable disabled={busy||!registered.length} onPress={()=>run({force:true,initialDays:30})}
+          style={{...button("#36405B"),flex:1}}>
+          <Text style={{color:METRO.white,fontWeight:"900",fontSize:12}}>30-DAY CATCH-UP</Text>
+        </Pressable>
       </View>
-      <Text style={{color:METRO.white,fontWeight:"900",fontSize:18}}>PREVIOUS MAILBOX SCANS</Text>
-      {mailboxes.length===0?<Text style={{color:METRO.dim}}>No mailboxes have been scanned yet.</Text>:mailboxes.map((m:any)=>
-        <View key={m.email} style={{...card,padding:13,flexDirection:"row",alignItems:"center"}}>
-          <Icon name="email-outline" color={METRO.cyan} size={23}/>
-          <View style={{flex:1}}>
-            <Text style={{color:METRO.white,fontWeight:"800"}}>{m.email}</Text>
-            <Text style={{color:METRO.dim,fontSize:11,marginTop:4}}>Last scan {m.last_synced_at?new Date(m.last_synced_at).toLocaleString():"—"} · {m.last_scan_count||0} candidates</Text>
-          </View>
-        </View>)}
-      <Text style={{color:METRO.dim,fontSize:11,lineHeight:17}}>One Android Google account is authorised at a time. Switch accounts to scan each mailbox. Scanning while the app is closed requires a separately configured cloud workflow. Gmail read-only permission is a restricted Google OAuth scope and may need verification for public distribution.</Text>
-    </ScrollView>
-  </View>;
+      {progress?<Text style={{color:METRO.cyan,fontSize:12}}>Checking {progress.email} · {progress.count} messages</Text>:null}
+      <Text style={muted}>{notice}</Text>
+    </View>
+    <Pressable onPress={()=>router.push("/mail-review")} style={{...card,
+      borderColor:METRO.purple+"AA",flexDirection:"row",alignItems:"center",gap:13}}>
+      <Icon name="clipboard-text-clock-outline" color={METRO.purple} size={32}/>
+      <View style={{flex:1}}>
+        <Text style={{color:METRO.white,fontWeight:"900",fontSize:17}}>REVIEW WHEN FREE</Text>
+        <Text style={muted}>{review.length} doubtful matches · grouped by day · last 7 days or all</Text>
+      </View>
+      <Icon name="chevron-right" size={23} color={METRO.purple}/>
+    </Pressable>
+    <Text style={{...muted,fontSize:11,textAlign:"center"}}>Read-only access. No emails are deleted. Google sign-in supports one current native session; if Android cannot silently restore another account, it will be flagged for reconnection rather than reading the wrong inbox. Fully closed-app monitoring is not provided.</Text>
+  </ScrollView>
+ </View>;
 }
