@@ -96,11 +96,30 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
   };
   const added:Dict={},duplicates:Dict={};
   for(const k of Object.keys(inbound)){
-    const existing=(vault as any)[k]||[];const array=inbound[k];
-    const existingKeys=new Set(existing.map((x:Dict)=>String(x.id)));
-    added[k]=array.filter(x=>!existingKeys.has(String(x.id))).length;
-    duplicates[k]=array.length-added[k];
-    (vault as any)[k]=mergeById(existing,array);
+    const existing:Dict[]=(vault as any)[k]||[];const array=inbound[k];
+    const logical=(x:Dict)=>k==="subscriptions"?[
+      normalized(x.provider),normalized(x.plan||x.product),lower(x.account_email)].join("|"):
+      k==="accounts"?[normalized(x.provider),lower(x.email)].join("|"):
+      k==="promo_codes"?[normalized(x.provider),normalized(x.code),lower(x.account_email)].join("|"):
+      String(x.id);
+    const index=new Map<string,Dict>();
+    for(const row of existing)index.set(logical(row),row);
+    let newCount=0,mergedCount=0;
+    for(const incoming of array){
+      const key=logical(incoming),prior=index.get(key);
+      if(prior){
+        // Preserve saved user edits, confirmed status and known prices when
+        // importing a workbook again; do not duplicate recurring renewals.
+        const combined={...incoming,...prior,id:prior.id};
+        for(const field of ["price","currency","renewal_date","trial_end","account_email","email"]){
+          if((prior[field]==null||prior[field]==="")&&incoming[field]!=null&&incoming[field]!=="")combined[field]=incoming[field];
+        }
+        if(prior.status==="Unknown"&&incoming.status&&incoming.status!=="Unknown")combined.status=incoming.status;
+        index.set(key,combined);mergedCount++;
+      }else{index.set(key,incoming);newCount++;}
+    }
+    added[k]=newCount;duplicates[k]=mergedCount;
+    (vault as any)[k]=Array.from(index.values());
   }
   if(data.settings&&typeof data.settings==="object"&&!Array.isArray(data.settings)){
     for(const k of ["currency","ai_enabled","keep_screenshots","price_monitoring","auto_add_threshold"]){
