@@ -1,4 +1,4 @@
-name: SubMind Smart Companion Final APK
+name: SubMind Smart Companion Final APK v2
 
 # One-shot: only creation/edits of this workflow trigger it on the integration
 # branch. Subsequent app edits do not produce automatic GitHub billing.
