@@ -5,6 +5,7 @@ import { AppHeader, Icon } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const TOOLS = [
+  { title: "Smart Companion", detail: "Goals · credit optimizer · benefit matcher · follow-ups · GitHub watch · connections", icon: "brain", path: "/smart-companion" },
   { title: "Gmail Sync", detail: "Connected inboxes · verified findings · duplicate-aware import", icon: "gmail", path: "/gmail-sync" },
   { title: "AI Models & Keys", detail: "Gemini, Groq, NVIDIA and Brave · test access", icon: "key-variant", path: "/api-keys" },
   { title: "Tool Brain Map", detail: "Map your own tools · find tools for goals", icon: "brain", path: "/tool-brain" },
