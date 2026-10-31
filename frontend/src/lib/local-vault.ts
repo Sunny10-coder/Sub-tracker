@@ -14,7 +14,8 @@ const EMPTY:Vault={schema:"submind-import-v1",subscriptions:[],accounts:[],watch
  promo_codes:[],mail_activity:[],review_queue:[],prompts:[],mailboxes:[],promo_sources:[],promo_findings:[],benefits:[],links:[],reminders:[],price_snapshots:[],
  settings:{currency:"AED",ai_enabled:true,price_monitoring:false,auto_add_threshold:0.95}};
 
-function normalized(s:any):string{return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+function lower(s:any):string{return String(s||"").toLowerCase()}
+function normalized(s:any):string{return lower(s).replace(/[^a-z0-9]/g,"")}
 function string(s:any):string{return typeof s==="string"?s.trim():""}
 function asArray(x:any):Dict[]{return Array.isArray(x)?x.filter(v=>v&&typeof v==="object"):[]}
 function copy(v:Vault):Vault{
@@ -198,7 +199,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else if(route==="/prompts"&&method==="POST"){
       const title=string(data.title);const body=string(data.text);
       if(!title||!body)throw Error("Prompt title and text are required");
-      const rec={id:"prompt-"+uid(),title,text:body,category:inferCategory(title+" "+body),tags:inferTags(title+" "+body,asArray(data.tags).map(x=>String(x))),related_ids:[],created_at:nowIso(),...data};
+      const rec={id:"prompt-"+uid(),title,text:body,category:inferCategory(title+" "+body),tags:inferTags(title+" "+body,Array.isArray(data.tags)?data.tags.filter((x:any)=>typeof x==="string").map((x:string)=>x.trim()):[]),related_ids:[],created_at:nowIso(),...data};
       v.prompts.unshift(rec);result=rec;
    }else if(route.startsWith("/prompts/")&&method==="PATCH"){
       const rec=v.prompts.find(x=>x.id===route.split("/")[2]);if(!rec)notFound();
