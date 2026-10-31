@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
-import { ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, useInvalidateAll, useLink } from "@/src/lib/api";
@@ -55,7 +55,7 @@ export default function LinkDetail() {
   const addTags = () => {
     const add = parseTags(newTags);
     if (!add.length) return;
-    patch.mutate({ tags: [...tags, ...add] });
+    patch.mutate({ tags: Array.from(new Set([...tags, ...add])) });
     setNewTags("");
   };
 
@@ -136,7 +136,9 @@ export default function LinkDetail() {
 
         <View style={{ gap: 8 }}>
           {l.url?.startsWith("http") ? <PrimaryButton title="Open link" icon="open-in-new" onPress={open} testID="open-link" /> : null}
-          <PrimaryButton title="Delete" icon="trash-can-outline" variant="secondary" onPress={() => del.mutate()} loading={del.isPending} testID="delete-link" />
+          <PrimaryButton title="Delete" icon="trash-can-outline" variant="secondary" onPress={() => Alert.alert("Delete saved link?","This removes the bookmark and its local reminder, but not the original website.",[
+            {text:"Keep",style:"cancel"},{text:"Delete",style:"destructive",onPress:()=>del.mutate()}
+          ])} loading={del.isPending} testID="delete-link" />
         </View>
       </ScrollView>
     </View>
