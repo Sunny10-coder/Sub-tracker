@@ -1,9 +1,9 @@
 name: Build SubMind Metro v2.3 Android APK
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/submind-unified-vault-gmail-20261031
+      - feature/submind-smart-vault-20261030
     paths:
       - '.github/workflows/submind-v23-android-apk.yml'
   workflow_dispatch:
