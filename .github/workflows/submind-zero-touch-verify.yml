@@ -1,5 +1,5 @@
 name: Verify zero-touch Gmail SubMind
-# One-off PR validation after zero-touch automatic launch integration
+# One-off PR validation after fixing duplicate account status
 
 on:
   pull_request:
