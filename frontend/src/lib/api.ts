@@ -135,7 +135,18 @@ async function req<T>(path:string,opts?:RequestInit):Promise<T>{
 
 export const api = {
   insights: () => req<any>("/insights"),
-  accounts: () => localRequest<any[]>("/accounts"),
+  accounts: async () => {
+    const accounts=await localRequest<any[]>("/accounts");
+    const subs=await api.subscriptions().catch(()=>[]);
+    const key=(v:any)=>String(v||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
+    return accounts.map(account=>{
+      const accountEmail=String(account.email||"").trim().toLowerCase();
+      const linked=accountEmail?subs.filter((sub:any)=>
+        key(sub.provider)===key(account.provider) &&
+        String(sub.account_email||"").trim().toLowerCase()===accountEmail):[];
+      return {...account,plans:linked.map((sub:any)=>({id:sub.id,plan:sub.plan,status:sub.status}))};
+    });
+  },
   createAccount: (b:any) => localRequest<any>("/accounts",{method:"POST",body:JSON.stringify(b)}),
   account: async (id:string) => {
     const record=await localRequest<any>("/accounts/"+encodeURIComponent(id));
