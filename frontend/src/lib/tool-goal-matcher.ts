@@ -25,7 +25,7 @@ const IGNORE=new Set(["i","a","the","and","to","of","my","me","for","in","with",
 const words=(s:string)=>String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").split(" ").filter(x=>x.length>=3&&!IGNORE.has(x));
 export function isGoalQuery(input:string):boolean{
   const q=input.toLowerCase().trim();
-  return /\b(?:i (?:want|need|plan|would like) to|help me|what tools? (?:should|can)|which (?:app|tool)|how (?:do|can) i (?:make|build|create|automate|design|edit|research|study|produce)|recommend (?:tools?|apps?)|find (?:tools?|apps?) (?:for|to))\b/.test(q);
+  return /\b(?:i (?:want|need|plan|would like) to|help me|what tools? (?:should|can)|which (?:app|tool)|how (?:do|can) i (?:make|build|create|automate|design|edit|research|study|produce)|recommend (?:tools?|apps?)|find (?:tools?|apps?) (?:for|to)|compare .+ for my goal|step[- ]by[- ]step workflow|show how to use)\b/.test(q);
 }
 export function recommendToolsForGoal(v:Vault,rawGoal:string):GoalRecommendation{
  const goal=rawGoal.trim().slice(0,900),tokens=words(goal);
