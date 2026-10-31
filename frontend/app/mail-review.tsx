@@ -20,7 +20,7 @@ export default function MailReview() {
     if(tab!=="All"&&e.type!==tab)return false;
     if(range==="all")return true;
     const stamp=Date.parse(e.source_date||e.created_at||"");
-    if(!Number.isFinite(stamp))return range==="all";
+    if(!Number.isFinite(stamp))return false;
     return range==="today"?now-stamp<=86400000:now-stamp<=7*86400000;
   }).sort((a:any,b:any)=>String(b.source_date||b.created_at).localeCompare(String(a.source_date||a.created_at)));
   const set=(id:string,field:string,value:string)=>setEdits(prev=>({...prev,[id]:{...prev[id],[field]:value}}));
