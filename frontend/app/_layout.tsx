@@ -36,7 +36,7 @@ export default function RootLayout() {
     const load = async () => {
       try {
         await initServerUrl();
-        const saved=await storage.getItem("submind.color.scheme","dark");
+        const saved=await storage.getItem("submind.color.scheme","");
         setColorScheme(saved==="light"?"light":"dark");
       } finally {
         setServerReady(true);
