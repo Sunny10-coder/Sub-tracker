@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { METRO, MetroBrand, MetroTile } from "@/src/components/metro-tiles";
 import { Icon } from "@/src/components/ui";
-import { api, useInvalidateAll, useMailboxes, useReviewQueue } from "@/src/lib/api";
+import { api, useInvalidateAll, useMailboxes } from "@/src/lib/api";
 import { connectGmail, disconnectGmail, getConnectedGmail, scanConnectedGmail } from "@/src/lib/gmail-sync";
 import type { MailType } from "@/src/lib/gmail-classifier";
 
@@ -18,7 +18,7 @@ export default function GmailSync() {
   const alreadyScanned=useRef("");
   const [kinds] = useState<MailType[]>(["subscription","account","promo"]);
   const {data:mailboxes=[]} = useMailboxes();
-  const {data:queue=[]} = useReviewQueue();
+
   const invalidate = useInvalidateAll();
   useEffect(() => { getConnectedGmail().then(setConnected).catch(() => setConnected(null)); }, []);
   const login = async (switchAccount=false) => {
@@ -96,18 +96,6 @@ export default function GmailSync() {
         </Pressable>
         <Text style={{color:METRO.dim,fontSize:13,lineHeight:20}}>{notice}</Text>
       </View>
-      <Pressable onPress={()=>router.push("/mail-review")} style={{backgroundColor:METRO.orange,padding:18,borderRadius:10,flexDirection:"row",alignItems:"center",gap:12}}>
-        <Icon name="clipboard-check-outline" size={27} color={METRO.ink}/>
-        <View style={{flex:1}}>
-          <Text style={{color:METRO.ink,fontSize:19,fontWeight:"900"}}>{queue.length} TO REVIEW</Text>
-          <Text style={{color:METRO.ink,fontSize:12}}>Optional diagnostic history. Normal scanning saves strong matches automatically.</Text>
-        </View>
-        <Icon name="arrow-right" color={METRO.ink} size={22}/>
-      </Pressable>
-      <Pressable onPress={cleanup} disabled={busy} style={{padding:14,borderRadius:9,borderColor:"#805B3B",borderWidth:1,backgroundColor:"#33261F",flexDirection:"row",alignItems:"center",gap:10}}>
-        <Icon name="broom" size={23} color={METRO.orange}/>
-        <Text style={{color:METRO.white,fontWeight:"900",fontSize:12,flex:1}}>CLEAN UP OLD IRRELEVANT SUGGESTIONS</Text>
-      </Pressable>
       <Text style={{color:METRO.white,fontWeight:"900",fontSize:18}}>PREVIOUS MAILBOX SCANS</Text>
       {mailboxes.length===0?<Text style={{color:METRO.dim}}>No mailboxes have been scanned yet.</Text>:mailboxes.map((m:any)=>
         <View key={m.email} style={{...card,padding:13,flexDirection:"row",alignItems:"center"}}>
