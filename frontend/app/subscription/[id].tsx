@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { Linking, ScrollView, Text, View } from "react-native";
+import { Alert, Linking, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, useInvalidateAll, useMemory, useSubscription } from "@/src/lib/api";
@@ -32,7 +32,6 @@ export default function SubscriptionDetail() {
 
   const patch = useMutation({ mutationFn: (b: any) => api.updateSubscription(id!, b), onSuccess: () => { setDraft({}); refetch(); invalidate(); } });
   const del = useMutation({ mutationFn: () => api.deleteSubscription(id!), onSuccess: () => { invalidate(); router.back(); } });
-  const pay = useMutation({ mutationFn: () => api.recordPayment(id!, {}), onSuccess: () => { refetch(); invalidate(); } });
 
   if (isLoading || !data) return <View style={styles.container}><AppHeader title="Subscription" back /><Loading /></View>;
 
@@ -111,9 +110,11 @@ export default function SubscriptionDetail() {
         ) : null}
 
         <View style={{ gap: 10 }}>
-          <PrimaryButton title="Record payment" icon="cash-check" variant="mint" onPress={() => pay.mutate()} loading={pay.isPending} testID="record-payment" />
+          <PrimaryButton title="Record payment" icon="cash-check" variant="mint" onPress={() => router.push({pathname:"/record-payment",params:{id:String(id)}})} testID="record-payment" />
           <PrimaryButton title="Add reminder" icon="bell-plus" variant="secondary" onPress={() => router.push("/add-reminder")} />
-          <PrimaryButton title="Delete" icon="trash-can-outline" variant="secondary" onPress={() => del.mutate()} loading={del.isPending} testID="delete-sub" style={{ backgroundColor: colors.error + "18" }} />
+          <PrimaryButton title="Delete" icon="trash-can-outline" variant="secondary" onPress={() => Alert.alert("Delete subscription?","This removes the saved record and its local payment history. It does not cancel the provider subscription.",[
+            {text:"Keep",style:"cancel"},{text:"Delete",style:"destructive",onPress:()=>del.mutate()}
+          ])} loading={del.isPending} testID="delete-sub" style={{ backgroundColor: colors.error + "18" }} />
         </View>
       </ScrollView>
     </View>
