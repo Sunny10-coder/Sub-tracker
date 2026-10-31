@@ -126,6 +126,7 @@ function dueDate(s:Dict):string|null{
 function charge(s:Dict):number|null{
  if(!["Active","Trial"].includes(s.status)||s.auto_renew===false||s.review_required===true)return null;
  if(s.status==="Trial"&&s.trial_paid!==true)return null;
+ if(s.source==="gmail"&&s.auto_detected===true&&s.payment_confirmed!==true)return null;
  if(s.price===null||s.price===undefined||!Number.isFinite(Number(s.price)))return null;
  const cost=Number(s.price);if(cost<0)return null;
  switch(String(s.billing_cycle||"").toLowerCase()){
