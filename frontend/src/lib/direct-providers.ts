@@ -67,12 +67,16 @@ function allowedGeminiModel(m: any): boolean {
     && !/(?:^|[-_.])2[.-]5(?:[-_.]|$)/.test(id)
     && !/(?:preview|experimental|(?:^|[-_.])exp(?:[-_.]|$)|(?:^|[-_.])latest(?:[-_.]|$)|embedding|native-audio|audio|image|live|tts)/.test(id);
 }
+/** Argon/Pro cost paid API credits. Only Flash/Lite models are eligible defaults. */
+export const isPaidGeminiModel=(id:string)=>!/gemini-[\d.]+-flash(?:-lite)?(?:$|-)/i.test(id);
 function geminiScore(id: string): number {
-  const v = id.match(/gemini-(\d+)(?:\.(\d+))?/);
-  const version = v ? Number(v[1]) * 100 + Number(v[2] || 0) : 0;
-  const tier = /flash/.test(id) ? (/lite/.test(id) ? 80 : 140) : /pro/.test(id) ? 40 : 0;
-  return version * 10 + tier;
+  const version = id.match(/gemini-(\d+)(?:\.(\d+))?/);
+  const v=version?Number(version[1])*100+Number(version[2]||0):0;
+  const safe=isPaidGeminiModel(id)?0:100000;
+  const lite=/flash-lite/.test(id)?2500:0;
+  return safe+lite+v*10;
 }
+export const geminiSafeDefault=(list:string[])=>list.find(x=>!isPaidGeminiModel(x))||"";
 function orderedNvidia(list: string[]): string[] {
   const unique = Array.from(new Set(list.filter(x =>
     typeof x === "string" && x.includes("/") && !NON_CHAT.test(x) && !LEGACY_NVIDIA.test(x))));
@@ -165,7 +169,8 @@ export async function checkKey(p: Provider, raw?: string): Promise<string> {
   if (p === "gemini") {
     const allowed = await listGemini(k);
     if (!allowed.length) throw Error("No supported stable Gemini models are available. Gemini 2.5 and preview/experimental models are excluded.");
-    const chosen = allowed[0];
+    const chosen = geminiSafeDefault(allowed);
+    if(!chosen)return "Gemini API key can list models, but only paid models are available. No paid inference test was performed.";
     const d = await call("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(chosen) + ":generateContent",
       { "x-goog-api-key": k }, { contents: [{ parts: [{ text: "Reply READY." }] }], generationConfig: { maxOutputTokens: 80 } });
     const answer = (d.candidates?.[0]?.content?.parts || []).map((x: any) => x.text || "").join("").trim();
@@ -184,11 +189,14 @@ export async function chat(question: string, context: string, provider: ChatProv
   ], model);
   if (provider === "gemini") {
     const allowed = await listGemini(k);
-    const m = model && allowed.includes(model) ? model : allowed[0];
-    if (!m) throw Error("No stable Gemini text model available. Gemini 2.5/preview models are excluded.");
+    const m = model ? (allowed.includes(model)?model:"") : geminiSafeDefault(allowed);
+    if (!m) throw Error("No eligible Gemini model. Choose a listed stable model explicitly; paid Argon is never selected automatically.");
+    if(isPaidGeminiModel(m)&&(!model||model!==m))
+      throw Error("A paid Gemini model must be selected explicitly.");
     const d = await call("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(m) + ":generateContent",
       { "x-goog-api-key": k }, { contents: [{ parts: [{ text: context + "\nUser: " + question }] }],
-        generationConfig: { maxOutputTokens: 1800 } });
+        generationConfig: { maxOutputTokens: isPaidGeminiModel(m)?900:1500,
+          ...(m==="gemini-4-argon"?{thinkingConfig:{thinkingLevel:"low"}}:{}) } });
     const answer = (d.candidates?.[0]?.content?.parts || []).map((x: any) => x.text || "").join("").trim();
     if (!answer) throw Error("Gemini returned no visible answer. Try another stable model.");
     return { answer, model: m };
