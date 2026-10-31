@@ -46,7 +46,7 @@ export async function forgetMailbox(email:string):Promise<string[]>{
   return next;
 }
 export async function getConnectedGmail():Promise<string|null>{
-  configure();
+  configure(activeGoogleAccount||undefined);
   let user=GoogleSignin.getCurrentUser();
   if(!user&&GoogleSignin.hasPreviousSignIn()){
     try {
