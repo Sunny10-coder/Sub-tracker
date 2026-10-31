@@ -343,6 +343,7 @@ export const api = {
 };
 
 // ------- hooks -------
+export const useArchivedSubscriptions = () => useQuery({queryKey:["archived-subscriptions"],queryFn:api.archivedSubscriptions});
 export const useAccounts = () => useQuery({queryKey:["local-accounts"],queryFn:api.accounts});
 export const useVaultDashboard = () => useQuery({queryKey:["local-vault-dashboard"],queryFn:api.vaultDashboard});
 export const usePrompts = () => useQuery({queryKey:["local-prompts"],queryFn:api.prompts});
@@ -374,7 +375,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["insights", "subscriptions", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "local-accounts", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
+    ["insights", "subscriptions", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }
