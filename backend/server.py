@@ -719,6 +719,9 @@ async def ingest_link(body: IngestLink):
         "enrichment": "done", "updated_at": now_iso(),
     }
     await db.saved_links.update_one({"id": lid}, {"$set": update})
+    if due:  # the reminder was created before the real title was known
+        await db.reminders.update_one({"user_id": USER_ID, "ref_type": "link", "ref_id": lid},
+                                      {"$set": {"title": f"Revisit: {update['title'][:80]}"}})
 
     # If it looks like a subscription/plan/offer, route to inbox too
     if ex.get("content_type") in ("subscription", "trial", "plan") and ex.get("provider"):

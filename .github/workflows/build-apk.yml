@@ -1,0 +1,105 @@
+name: Build Android APK
+
+# Builds an installable SubMind APK on GitHub's runners (no Expo account needed) and
+# publishes it as a workflow artifact and as a GitHub pre-release asset.
+#
+# Optional: set a repository variable BACKEND_URL (Settings > Secrets and variables > Actions >
+# Variables) to bake your server address into the APK. Without it, enter the server address in the
+# app under Settings > Server after installing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_url:
+        description: "Backend URL to bake into the APK (optional, https://...)"
+        required: false
+        default: ""
+  push:
+    branches: [main, ccr-c5bd9963-wyjmzz]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/build-apk.yml"
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_BACKEND_URL: ${{ inputs.backend_url || vars.BACKEND_URL || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install JS dependencies
+        run: yarn install --frozen-lockfile --ignore-scripts --ignore-engines
+
+      - name: Type check
+        run: npx tsc --noEmit -p .
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('frontend/yarn.lock', 'frontend/app.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Build release APK
+        working-directory: frontend/android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace -PreactNativeArchitectures=arm64-v8a,armeabi-v7a -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
+
+      - name: Name the APK
+        id: apk
+        run: |
+          set -e
+          src=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
+          out="SubMind-run${{ github.run_number }}.apk"
+          cp "$src" "$out"
+          ls -la "$out"
+          echo "path=frontend/$out" >> "$GITHUB_OUTPUT"
+          echo "name=$out" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SubMind-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish as a pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-run${{ github.run_number }}
+          name: SubMind APK (run ${{ github.run_number }})
+          prerelease: true
+          files: ${{ steps.apk.outputs.path }}
+          body: |
+            Installable Android build of SubMind (Lumia live-tile theme).
+            Debug-signed: install by allowing "install unknown apps". Set your server under Settings > Server.

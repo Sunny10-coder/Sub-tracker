@@ -55,7 +55,7 @@ export default function Compare() {
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
   cards: { flexDirection: "row", gap: 12 },
-  card: { flex: 1, borderRadius: 22, padding: 18 },
+  card: { flex: 1, borderRadius: 0, padding: 18 },
   name: { color: colors.onAccent, fontSize: 17, fontWeight: "800" },
   plan: { color: colors.onAccent, opacity: 0.8, fontSize: 13, marginTop: 2, fontWeight: "600" },
   price: { color: colors.onAccent, fontSize: 24, fontWeight: "800", marginTop: 14 },

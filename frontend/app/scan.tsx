@@ -119,7 +119,7 @@ export default function Scan() {
 
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
-  preview: { width: "100%", height: 200, borderRadius: 20, backgroundColor: colors.surfaceTertiary },
+  preview: { width: "100%", height: 200, borderRadius: 0, backgroundColor: colors.surfaceTertiary },
   center: { alignItems: "center", gap: 14, paddingVertical: 30 },
   centerText: { color: colors.onSurfaceSecondary, fontSize: 15, textAlign: "center", lineHeight: 21 },
   resultTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

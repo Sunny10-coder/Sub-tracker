@@ -1,102 +1,104 @@
-// Design tokens for SubMind. Light + Dark. Keys match design_guidelines.json.
-// Build StyleSheets with makeStyles((colors) => ...); read useTheme().colors for
-// non-style color props (icon color, placeholders). Never write hex in components.
+// SubMind design tokens: Nokia Lumia / Windows Phone "Metro" look.
+// Flat and square, content first: pure black (dark) or white (light) canvas, big light-weight
+// lowercase titles and solid saturated live tiles. Key names are stable so every screen
+// restyles from here. Build StyleSheets with makeStyles and a colors callback; read
+// useTheme().colors for non-style color props. Never write hex in components.
+// Contrast: tile fills carry white text (>= 4.5:1); dark brand carries black text, light
+// brand carries white text; muted text is >= 4.5:1 on its surface.
 
 import { useMemo } from "react";
-import { Appearance, StyleSheet, useColorScheme } from "react-native";
+import { Appearance, Platform, StyleSheet, useColorScheme } from "react-native";
 
 export type ColorScheme = "light" | "dark";
 
+// Windows Phone accent palette, darkened where needed so white tile text stays legible.
+const TILE = {
+  accentRed: "#E51400", // red
+  accentYellow: "#9E6400", // amber (WP amber/yellow, darkened for text)
+  accentOrange: "#C94F00", // orange
+  accentBlue: "#0A7BB8", // cyan/cobalt
+  accentPurple: "#6A00FF", // indigo
+  accentGreen: "#008A00", // emerald
+  accentPink: "#D80073", // magenta
+  onAccent: "#FFFFFF",
+};
+
 const light = {
-  surface: "#F4F1EA", // warm paper canvas
-  onSurface: "#17151F",
-  surfaceSecondary: "#FFFFFF",
-  onSurfaceSecondary: "#1A1A24",
-  surfaceTertiary: "#ECE8DF",
-  onSurfaceTertiary: "#4A4A58",
-  surfaceInverse: "#141319", // dark hero cards / nav pill
+  surface: "#FFFFFF",
+  onSurface: "#000000",
+  surfaceSecondary: "#F2F2F2", // list / card tiles
+  onSurfaceSecondary: "#111111",
+  surfaceTertiary: "#E3E3E3",
+  onSurfaceTertiary: "#333333",
+  surfaceInverse: "#000000",
   onSurfaceInverse: "#FFFFFF",
-  muted: "#8A8578",
+  muted: "#5E5E5E",
 
-  brand: "#5B45FF",
+  brand: "#0870A8",
   onBrand: "#FFFFFF",
-  brandPrimary: "#5B45FF",
+  brandPrimary: "#0870A8",
   onBrandPrimary: "#FFFFFF",
-  brandSecondary: "#00C08B",
-  onBrandSecondary: "#003B2E",
-  brandTertiary: "#FF8C7A",
-  onBrandTertiary: "#4A150D",
+  brandSecondary: "#2F7A0A",
+  onBrandSecondary: "#FFFFFF",
+  brandTertiary: "#C94F00",
+  onBrandTertiary: "#FFFFFF",
 
-  success: "#10B981",
+  success: "#2F7A0A",
   onSuccess: "#FFFFFF",
-  warning: "#E5900B",
+  warning: "#8F5A00",
   onWarning: "#FFFFFF",
-  error: "#EF4444",
+  error: "#C81000",
   onError: "#FFFFFF",
-  info: "#3B82F6",
+  info: "#0870A8",
   onInfo: "#FFFFFF",
 
-  border: "#E4DFD4",
-  borderStrong: "#CFC8B8",
-  divider: "#E8E3D8",
+  border: "#CFCFCF",
+  borderStrong: "#9A9A9A",
+  divider: "#DDDDDD",
 
-  // Bright color-blocks for cards / bubbles / folders
-  accentRed: "#F4503F",
-  accentYellow: "#FFCC3E",
-  accentOrange: "#FF7A2F",
-  accentBlue: "#5AA9E6",
-  accentPurple: "#C09BEB",
-  accentGreen: "#5FBE8A",
-  accentPink: "#FF8FB1",
-  onAccent: "#1F1A15", // dark ink on every bright accent
+  ...TILE,
 };
 
 export type ThemeColors = typeof light;
 
 const dark: ThemeColors = {
-  surface: "#0C0B10",
+  surface: "#000000",
   onSurface: "#FFFFFF",
-  surfaceSecondary: "#17161F",
-  onSurfaceSecondary: "#F3F4F6",
-  surfaceTertiary: "#221F2C",
-  onSurfaceTertiary: "#D1D5DB",
-  surfaceInverse: "#F4F1EA",
-  onSurfaceInverse: "#141319",
-  muted: "#9C978C",
+  surfaceSecondary: "#1F1F1F",
+  onSurfaceSecondary: "#F2F2F2",
+  surfaceTertiary: "#2E2E2E",
+  onSurfaceTertiary: "#D6D6D6",
+  surfaceInverse: "#FFFFFF",
+  onSurfaceInverse: "#000000",
+  muted: "#9A9A9A",
 
-  brand: "#7B6AFE",
-  onBrand: "#FFFFFF",
-  brandPrimary: "#7B6AFE",
-  onBrandPrimary: "#FFFFFF",
-  brandSecondary: "#23EAA9",
-  onBrandSecondary: "#003B2E",
-  brandTertiary: "#FFA394",
-  onBrandTertiary: "#4A150D",
+  brand: "#1BA1E2",
+  onBrand: "#000000",
+  brandPrimary: "#1BA1E2",
+  onBrandPrimary: "#000000",
+  brandSecondary: "#60A917",
+  onBrandSecondary: "#000000",
+  brandTertiary: "#FA6800",
+  onBrandTertiary: "#000000",
 
-  success: "#34D399",
-  onSuccess: "#064E3B",
-  warning: "#FBBF24",
-  onWarning: "#78350F",
-  error: "#F87171",
-  onError: "#7F1D1D",
-  info: "#3B82F6",
-  onInfo: "#FFFFFF",
+  success: "#6CC416",
+  onSuccess: "#000000",
+  warning: "#F0A30A",
+  onWarning: "#000000",
+  error: "#FF5544",
+  onError: "#000000",
+  info: "#1BA1E2",
+  onInfo: "#000000",
 
-  border: "#2A2836",
-  borderStrong: "#3F3D50",
-  divider: "#1E1C28",
+  border: "#3A3A3A",
+  borderStrong: "#6B6B6B",
+  divider: "#2A2A2A",
 
-  accentRed: "#F4503F",
-  accentYellow: "#FFCC3E",
-  accentOrange: "#FF7A2F",
-  accentBlue: "#5AA9E6",
-  accentPurple: "#C09BEB",
-  accentGreen: "#5FBE8A",
-  accentPink: "#FF8FB1",
-  onAccent: "#1F1A15",
+  ...TILE,
 };
 
-export const defaultScheme = "light" satisfies ColorScheme;
+// Windows Phone defaults to the dark theme.
+export const defaultScheme = "dark" satisfies ColorScheme;
 
 export const themes: { light: ThemeColors; dark?: ThemeColors } = { light, dark };
 
@@ -108,7 +110,7 @@ setColorScheme?.(themes.dark ? null : defaultScheme);
 
 export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
   const system = useColorScheme();
-  const scheme: ColorScheme = system && themes[system] ? system : defaultScheme;
+  const scheme: ColorScheme = system === "light" || system === "dark" ? (themes[system] ? system : defaultScheme) : defaultScheme;
   return { scheme, colors: themes[scheme] ?? themes.light };
 }
 
@@ -121,8 +123,20 @@ export function makeStyles<T extends StyleSheet.NamedStyles<T> | StyleSheet.Name
   };
 }
 
-// Bright color-block palette, cycled per card for the playful look.
-export const ACCENT_KEYS = ["accentYellow", "accentRed", "accentOrange", "accentBlue", "accentPurple", "accentGreen", "accentPink"] as const;
+// Metro typography: light weights, generous size, lowercase page titles.
+export const font = {
+  // Android maps weight 200/300 to Roboto Light; iOS uses the system thin/light.
+  thin: { fontWeight: "200" as const, fontFamily: Platform.select({ android: "sans-serif-light", default: undefined }) },
+  light: { fontWeight: "300" as const, fontFamily: Platform.select({ android: "sans-serif-light", default: undefined }) },
+  regular: { fontWeight: "400" as const },
+  semibold: { fontWeight: "600" as const },
+};
+
+// Gutter between Start-screen tiles (Windows Phone used 6px).
+export const TILE_GAP = 6;
+
+// Palette cycled per card for variety (same names as before).
+export const ACCENT_KEYS = ["accentBlue", "accentPink", "accentOrange", "accentGreen", "accentPurple", "accentRed", "accentYellow"] as const;
 
 export function accentFor(colors: ThemeColors, seed: string | number): string {
   const s = typeof seed === "number" ? seed : Array.from(String(seed)).reduce((a, c) => a + c.charCodeAt(0), 0);

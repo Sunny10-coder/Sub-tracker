@@ -19,6 +19,7 @@ export default function AddSubscription() {
   const [f, setF] = useState<any>({
     provider: "", product: "", plan: "", category: "Other", status: "Active",
     price: "", currency: "AED", billing_cycle: "monthly", renewal_date: "", trial_end: "", notes: "",
+    account_email: "", cancel_url: "", promo_code: "",
   });
   const set = (k: string) => (v: any) => setF((s: any) => ({ ...s, [k]: v }));
 
@@ -44,6 +45,9 @@ export default function AddSubscription() {
         <SelectField label="Billing cycle" options={CYCLES} value={f.billing_cycle} onChange={set("billing_cycle")} testID="f-cycle" />
         <TextField label="Renewal date" value={f.renewal_date} onChangeText={set("renewal_date")} placeholder="YYYY-MM-DD" testID="f-renewal" />
         <TextField label="Trial end (optional)" value={f.trial_end} onChangeText={set("trial_end")} placeholder="YYYY-MM-DD" testID="f-trial" />
+        <TextField label="Account mail id" value={f.account_email} onChangeText={set("account_email")} placeholder="the email this account uses" keyboardType="email-address" testID="f-email" />
+        <TextField label="Cancel page (optional)" value={f.cancel_url} onChangeText={set("cancel_url")} placeholder="https://…" testID="f-cancel" />
+        <TextField label="Promo code (optional)" value={f.promo_code} onChangeText={set("promo_code")} placeholder="SAVE20" testID="f-promo" />
         <TextField label="Notes" value={f.notes} onChangeText={set("notes")} placeholder="Anything to remember" multiline testID="f-notes" />
       </FormScroll>
       <KeyboardStickyView>

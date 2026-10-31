@@ -213,6 +213,8 @@ def test_github_link_gets_section_tags_and_use_cases(client, monkeypatch):
     assert client.get("/api/links", params={"tag": "python"}).json()[0]["id"] == link["id"]
     assert any(t["tag"] == "python" for t in client.get("/api/links/tags").json())
 
+    rem = [r for r in client.get("/api/reminders").json() if r["ref_id"] == link["id"]][0]
+    assert rem["title"] == "Revisit: FastAPI", "reminder should carry the analysed title, not the bare domain"
     mem = client.get("/api/memory/dashboard").json()
     assert mem["dont_forget"][0]["reason"] == "reminder" and mem["dont_forget"][0]["days_left"] == 3
     assert mem["github_count"] == 1
