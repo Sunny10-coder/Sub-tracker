@@ -35,7 +35,7 @@ export default function GmailSync() {
     if(!connected)return;
     setBusy(true);setProgress(0);setNotice("Reading matching Gmail messages on this phone…");
     try {
-      const result=await scanConnectedGmail({days,limit:days>=730?200:100,onProgress:setProgress});
+      const result=await scanConnectedGmail({days,limit:days>=730?200:120,kinds,onProgress:setProgress});
       const imported=await api.importMail(result.email,result.candidates);
       invalidate();
       setNotice("Scanned "+result.messages_scanned+" messages. "+imported.added+" new candidates; "+imported.duplicates+" already seen or duplicates."
