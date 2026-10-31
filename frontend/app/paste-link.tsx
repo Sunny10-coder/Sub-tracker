@@ -2,7 +2,7 @@
 // tagged and saved like a bookmark. Optional tags and a "remind me" so it is never forgotten.
 import { useMutation } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
@@ -25,12 +25,15 @@ export default function PasteLink() {
   const styles = useStyles();
   const { colors } = useTheme();
   const router = useRouter();
+  const {url:sharedUrl}=useLocalSearchParams<{url?:string}>();
   const insets = useSafeAreaInsets();
   const invalidate = useInvalidateAll();
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(typeof sharedUrl==="string"?sharedUrl:"");
   const [note, setNote] = useState("");
   const [tags, setTags] = useState("");
   const [remind, setRemind] = useState(REMIND_PRESETS[0].label);
+
+  useEffect(()=>{if(typeof sharedUrl==="string"&&sharedUrl.trim())setUrl(sharedUrl.trim());},[sharedUrl]);
 
   // If a link is already on the clipboard, offer it straight away.
   useEffect(() => {
