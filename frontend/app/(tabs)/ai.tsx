@@ -37,8 +37,8 @@ export default function AskAI() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Msg[]>([]);
-  useEffect(()=>{if(typeof ask==="string"&&ask.trim())setInput(ask.trim());},[ask]);
   const [input, setInput] = useState("");
+  useEffect(()=>{if(typeof ask==="string"&&ask.trim())setInput(ask.trim());},[ask]);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
