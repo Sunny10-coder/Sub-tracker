@@ -31,7 +31,7 @@ function copy(v:Vault):Vault{
 function ident(s:Dict):string{return [normalized(s.provider||s.Provider||s.Service),
  normalized(s.product||s.Product),normalized(s.plan||s.Plan),
  normalized(s.account_email||s.email||s["Stated account email"]),
- string(s.mailbox_email||s.Mailbox).toLowerCase(),string(s.renewal_date||s["Renewal / expiry"])].join("|")}
+ string(s.mailbox_email||s.Mailbox).toLowerCase()].join("|")}
 function pickVal(s:Dict,k:string,other?:string):any{return s[k] ?? (other?s[other]:undefined)}
 function normalizeSub(s:Dict):Dict{
  const status=string(s.status||s.Status);
@@ -41,7 +41,7 @@ function normalizeSub(s:Dict):Dict{
   status:allowed.includes(status)?status:"Unknown",
   account_email:string(s.account_email).toLowerCase(),
   price:s.price===null || s.price===undefined || s.price===""?null:Number(s.price),
-  currency:string(s.currency||s.Currency||"AED").toUpperCase(),
+  currency:string(s.currency||s.Currency).toUpperCase(),
   billing_cycle:string(s.billing_cycle||s["Billing cycle"]||"unknown").toLowerCase(),
   renewal_date:s.renewal_date||s["Renewal / expiry"]||null,
   category:s.category||s.Category||"Other",
@@ -51,7 +51,7 @@ function normalizeAccount(a:Dict):Dict{return {...a,id:a.id||"locacct-"+normaliz
  provider:a.provider||a.Provider||"Unknown",email:string(a.email).toLowerCase(),status:a.status||"Needs confirmation"}}
 function normalizeWatch(a:Dict):Dict{return {...a,id:a.id||"watch-"+normalized(a.Provider+"|"+a.Plan),
  provider:a.provider||a.Provider||"Unknown",plan:a.plan||a.Plan||"",
- price:a.price??a.Price??null,currency:a.currency||a.Currency||"AED",
+ price:a.price??a.Price??null,currency:a.currency||a.Currency||"",
  billing_cycle:a.billing_cycle||a["Billing cycle"]||"unknown",status:a.status||a.Status||"Watching"}}
 function normalizePromo(a:Dict):Dict{return {...a,id:a.id||"promo-"+normalized(a.Service+"|"+a.Code),
  provider:a.provider||a.Service||"Unknown",code:a.code||a.Code||"",
@@ -497,6 +497,17 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       const classified=classifyLink(String(data.url||""),String(data.note||""),String(data.source||"share"));
       const existing=v.links.find(l=>l.canonical_url===classified.canonical_url);
       if(existing)result=existing;else{const rec={...classified,...data,id:"link-"+uid(),created_at:nowIso()};v.links.unshift(rec);result=rec}
+   }else if(route==="/inbox/ingest-extraction"&&method==="POST"){
+      const source=string(data.source)||"screenshot",raw=data.extraction;
+      if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Error("No structured extraction returned.");
+      const allowed=["provider","product","plan","price","currency","billing_cycle","renewal_date",
+        "trial_end","offer_expiry","account_email","cancel_url","content_type","summary","category"];
+      const extracted:Dict={};
+      for(const field of allowed)if(Object.prototype.hasOwnProperty.call(raw,field))extracted[field]=raw[field];
+      if(!string(extracted.provider)&&!string(extracted.product))throw Error("Provider could not be identified. Use manual review instead.");
+      const entry={id:"inbox-"+uid(),source,created_at:nowIso(),status:"needs_review",
+        extraction:extracted,confidence:0.65,doubts:["AI extracted this from an image. Confirm against the original screenshot before saving."]};
+      v.review_queue.unshift(entry);result=entry;
    }else if(route==="/ingest/text"&&method==="POST"){
       const raw=string(data.text).slice(0,12000);
       if(!raw)throw Error("Enter text to save.");
