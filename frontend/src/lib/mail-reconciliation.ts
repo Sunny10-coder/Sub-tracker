@@ -85,7 +85,7 @@ export function applyMailCandidate(
  id:()=>string,force=false
 ):MailApplyResult{
  const mailbox=email(mailboxRaw);
- const sourceKey=mailbox+":"+str(candidate.message_id)+":"+str(candidate.type);
+ const sourceKey=mailbox+":"+str(candidate.message_id);
  const info:Row=candidate.extraction||{};
  const provider=str(info.provider);
  const kind=str(candidate.type);
@@ -93,8 +93,14 @@ export function applyMailCandidate(
  if(!mailbox.includes("@")||!str(candidate.message_id)||!provider||!["subscription","account","promo"].includes(kind))
   return{decision:"ignored",type:kind,reason:"Missing verified identity or provider"};
  if(!force&&Number(candidate.classifier_version)<2)return{decision:"ignored",type:kind,reason:"Obsolete parser output"};
- if(v.mail_activity.some(x=>str(x.source_key)===sourceKey&&["smart_sync","approved_v3"].includes(str(x.action))))
-  return{decision:"duplicate",type:kind,reason:"Already processed source email"};
+ // Deduplicate by actual Gmail mailbox + message ID even when older versions
+ // appended a classifier type. A renewed receipt updates its existing plan.
+ if(v.mail_activity.some(x=>{
+   const prior=str(x.source_key);
+   return (prior===sourceKey||prior.startsWith(sourceKey+":"))&&
+     ["smart_sync","approved_v3","auto_sync"].includes(str(x.action));
+ }))
+  return{decision:"duplicate",type:kind,reason:"Already processed Gmail message ID in this mailbox"};
  const event:MailEventType=(info.event_type as MailEventType)||eventFromSubject(candidate.source_subject,kind);
  const when=str(candidate.source_date)||now;
  if(confidence<0.82&&!force) return queueReview(v,candidate,mailbox,"Low evidence confidence",sourceKey,id,now);
