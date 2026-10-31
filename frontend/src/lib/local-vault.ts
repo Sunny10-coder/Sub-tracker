@@ -185,14 +185,26 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       const id=route.split("/")[2];v.subscriptions=v.subscriptions.filter(x=>x.id!==id);result={ok:true};
    }else if(route==="/accounts"&&method==="POST"){
       const rec=normalizeAccount({...data,id:"acct-"+uid()});
-      if(!rec.email||!rec.provider)throw Error("Account provider and sign-in email are required");
-      if(v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&string(a.email)===string(rec.email)))throw Error("409: Account already exists");
+      if(!rec.provider||rec.provider==="Unknown")throw Error("Account provider is required");
+      if(v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&string(a.email).toLowerCase()===string(rec.email).toLowerCase()))throw Error("409: This provider and sign-in email are already saved");
       v.accounts.unshift(rec);result=rec;
    }else if(route.startsWith("/accounts/")&&method==="PATCH"){
       const id=route.split("/")[2];const x=v.accounts.find(a=>a.id===id);if(!x)notFound();
       Object.assign(x,data);result=x;
    }else if(route.startsWith("/accounts/")&&method==="DELETE"){
       v.accounts=v.accounts.filter(a=>a.id!==route.split("/")[2]);result={ok:true};
+   }else if(route.startsWith("/subscriptions/")&&route.endsWith("/payment")&&method==="POST"){
+      const id=route.split("/")[2],record=v.subscriptions.find(x=>x.id===id);
+      if(!record)notFound();
+      const amount=data.amount===undefined||data.amount===null?null:Number(data.amount);
+      const date=string(data.date),currency=string(data.currency||record.currency);
+      if(amount===null||!Number.isFinite(amount)||amount<0||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!currency)
+        throw Error("Confirm an amount, currency and date before recording a payment.");
+      record.payments=Array.isArray(record.payments)?record.payments:[];
+      const prior=record.payments.find((p:Dict)=>p.amount===amount&&p.date===date&&p.currency===currency);
+      if(prior){result={duplicate:true,payment:prior};}
+      else{const payment={id:"pay-"+uid(),amount,date,currency,source:"manual-confirmed",created_at:nowIso()};
+        record.payments.unshift(payment);result={duplicate:false,payment};}
    }else if(route==="/reminders"&&method==="POST"){
       const rec={...data,id:"rem-"+uid(),completed:false,created_at:nowIso()};v.reminders.unshift(rec);result=rec;
    }else if(route.startsWith("/reminders/")){
@@ -440,6 +452,32 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       const classified=classifyLink(String(data.url||""),String(data.note||""),String(data.source||"share"));
       const existing=v.links.find(l=>l.canonical_url===classified.canonical_url);
       if(existing)result=existing;else{const rec={...classified,...data,id:"link-"+uid(),created_at:nowIso()};v.links.unshift(rec);result=rec}
+   }else if(route==="/ingest/text"&&method==="POST"){
+      const raw=string(data.text).slice(0,12000);
+      if(!raw)throw Error("Enter text to save.");
+      if(/\\b(?:otp|verification code|one.time code|recovery phrase|private key|password)\\b/i.test(raw))
+        throw Error("Remove credentials and verification codes before saving.");
+      const entry={id:"inbox-"+uid(),source:string(data.source)||"manual",raw_text:raw,
+        source_subject:"Manual note",status:"needs_review",confidence:0,created_at:nowIso(),
+        extraction:{provider:"",summary:raw.slice(0,400),content_type:"note"},
+        doubts:["Manual note; no subscription has been inferred."]};
+      v.review_queue.unshift(entry);result=entry;
+   }else if(route==="/ingest/email"&&method==="POST"){
+      const raw=string(data.body).slice(0,16000);
+      if(!raw)throw Error("Paste email text before processing.");
+      if(/\\b(?:one.time code|verification code|security code|recovery phrase|private key|password reset|your otp)\\b/i.test(raw))
+        throw Error("Security or verification email rejected.");
+      const header=(name:string)=>raw.match(new RegExp("^"+name+":\\\\s*(.+)$","im"))?.[1]?.trim()||"";
+      const sender=string(data.sender)||header("From"),subject=string(data.subject)||header("Subject")||"Pasted email",to=string(data.to)||header("To");
+      const candidate=classifyMail({id:"pasted-"+uid(),subject,from:sender,date:nowIso(),
+        snippet:raw.slice(0,400),body:raw,labels:[]},to)[0];
+      const extracted=candidate?.extraction||{};
+      const entry={id:"inbox-"+uid(),source:"pasted-email",raw_text:raw,source_subject:subject,
+        source_from:sender,source_to:to,created_at:nowIso(),status:"needs_review",
+        extraction:{...extracted,account_email:extracted.account_email||to||"",summary:raw.slice(0,400)},
+        confidence:candidate?.confidence||0,
+        doubts:["Pasted email requires review before creating a plan."]};
+      v.review_queue.unshift(entry);result=entry;
    }else if(route==="/ingest/link"&&method==="POST"){
       const classified=classifyLink(String(data.url||""),String(data.text||""),String(data.source||"share"));
       const existing=v.links.find(l=>l.canonical_url===classified.canonical_url);
@@ -447,6 +485,14 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       if(existing){target=existing;result={link_id:existing.id,duplicate:true,link:existing};}
       else{const rec={...classified,id:"link-"+uid(),created_at:nowIso()};
        v.links.unshift(rec);target=rec;result={link_id:rec.id,duplicate:false,link:rec};}
+      if(Array.isArray(data.tags)&&data.tags.length){
+        target.tags=Array.from(new Set([...(target.tags||[]),...data.tags.filter((x:any)=>typeof x==="string").map((x:string)=>x.trim().toLowerCase()).filter(Boolean)]));
+      }
+      if(string(data.text)&&!target.note)target.note=string(data.text).slice(0,1200);
+      if(!string(data.reminder_date)&&Number.isFinite(Number(data.remind_in_days))&&Number(data.remind_in_days)>0){
+        const when=new Date();when.setDate(when.getDate()+Math.min(3650,Number(data.remind_in_days)));
+        data.reminder_date=when.toISOString().slice(0,10);
+      }
       if(string(data.reminder_date)){
         let reminder=v.reminders.find(r=>r.ref_type==="link"&&r.ref_id===target.id&&!r.completed);
         if(!reminder){reminder={id:"rem-"+uid(),ref_id:target.id,ref_type:"link",completed:false,created_at:nowIso()};v.reminders.unshift(reminder);}
@@ -457,6 +503,18 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else if(route==="/deals/track-price"&&method==="POST"){
       const rec={id:"price-"+uid(),checked_at:nowIso(),...data};
       v.price_snapshots.unshift(rec);result={duplicate:false,record:rec,change:null};
+   }else if(route.startsWith("/links/")&&route.endsWith("/opened")&&method==="POST"){
+      const id=route.split("/")[2],link=v.links.find(l=>l.id===id);if(!link)notFound();
+      link.opened_count=(Number(link.opened_count)||0)+1;link.last_opened_at=nowIso();result=link;
+   }else if(route.startsWith("/links/")&&route.endsWith("/remind")&&method==="POST"){
+      const id=route.split("/")[2],link=v.links.find(l=>l.id===id);if(!link)notFound();
+      let date=string(data.date);
+      if(!date){const n=Number(data.days);if(!Number.isFinite(n)||n<1)throw Error("Choose reminder date");
+        const d=new Date();d.setDate(d.getDate()+Math.min(3650,n));date=d.toISOString().slice(0,10);}
+      let r=v.reminders.find(x=>x.ref_type==="link"&&x.ref_id===id&&!x.completed);
+      if(!r){r={id:"rem-"+uid(),ref_type:"link",ref_id:id,completed:false,created_at:nowIso()};v.reminders.unshift(r);}
+      Object.assign(r,{title:string(data.title)||"Review saved link",due_date:date,remind_time:"09:00"});
+      link.reminder_due=date;link.reminder_id=r.id;result=r;
    }else if(route.startsWith("/links/")&&method==="DELETE"){
       v.links=v.links.filter(l=>l.id!==route.split("/")[2]);result={ok:true};
    }else if(route.startsWith("/links/")&&method==="PATCH"){
