@@ -86,7 +86,7 @@ export function matchSubscriptionBenefits(v:Item,candidate:Item|string,limit=7):
   const tokens=terms([item.provider,item.product,item.plan,item.description,item.notes,
     item.benefit,item.category,(item.tags||[]).join(" ")].join(" "));
   const shared=overlap(target,tokens);
-  const sameProvider=provider&&provider===lower(item.provider);
+  const sameProvider=Boolean(provider)&&provider===lower(item.provider);
   const sameName=norm(record.title).length>3&&norm(item.provider).length>3&&
    norm(record.title).includes(norm(item.provider));
   const points=shared.length*2+(sameProvider?7:0)+(sameName?5:0)+
@@ -176,7 +176,7 @@ export function knowledgeConnections(v:Item,item:Item,max=7):KnowledgeConnection
   const shared=(x.tags||[]).filter((x:string)=>srcTags.has(lower(x)));
   const target=terms([x.title,x.provider,x.plan,x.summary,x.description,x.text,
     (x.search_keywords||[]).join(" ")].join(" "));
-  const sameProvider=lower(item.provider)&&lower(item.provider)===lower(x.provider);
+  const sameProvider=Boolean(lower(item.provider))&&lower(item.provider)===lower(x.provider);
   const related=overlap(srcTerms,target);
   const score=shared.length*4+related.length+(item.category&&item.category===x.category?2:0)+(sameProvider?5:0);
   if(score<4)return;
