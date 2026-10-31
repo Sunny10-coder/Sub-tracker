@@ -116,7 +116,8 @@ async function req<T>(path:string,opts?:RequestInit):Promise<T>{
         return {...server,cancel_radar:radar,urgent_count:radar.filter((x:PrivateRecord)=>(x.days_left??99)<=3).length,
           promos:[...(local.promos||[]),...(server.promos||[])],
           missing_info:[...(local.missing_info||[]),...(server.missing_info||[])],
-          accounts_by_email:[...(local.accounts_by_email||[]),...(server.accounts_by_email||[])]} as T;
+          accounts_by_email:[...(local.accounts_by_email||[]),...(server.accounts_by_email||[])],
+          dont_forget:mergeRecords("/links",local.dont_forget||[],server.dont_forget||[])} as T;
       }catch{return local as T;}
     }
   }
@@ -235,7 +236,27 @@ export const api = {
   search: (q: string) => req<any>(`/search?q=${encodeURIComponent(q)}`),
   chat: (question: string) => req<any>("/ai/chat", { method: "POST", body: JSON.stringify({ question }) }),
   chatHistory: () => req<any[]>("/ai/chat/history"),
-  compare: (ids: string[]) => req<any>("/ai/compare", { method: "POST", body: JSON.stringify({ ids }) }),
+  compare: async(ids:string[]) => {
+    const vault=await getVault();
+    const owned=ids.filter(id=>vault.watchlist.some(x=>x.id===id));
+    if(serverUrl&&owned.length===0){
+      return remoteReq<any>("/ai/compare",{method:"POST",body:JSON.stringify({ids})});
+    }
+    const all=await api.watchlist();
+    const items=ids.map(id=>all.find((x:any)=>x.id===id)).filter(Boolean);
+    if(items.length<2)return {items,comparison:"Two saved plans are needed for a comparison."};
+    const [a,b]=items;
+    const sameUnit=!!a.currency&&!!b.currency&&
+      a.currency===b.currency&&a.billing_cycle===b.billing_cycle;
+    const numeric=a.price!=null&&b.price!=null&&
+      Number.isFinite(Number(a.price))&&Number.isFinite(Number(b.price));
+    const summary=sameUnit&&numeric?
+      (Number(a.price)===Number(b.price)?
+        "Both list the same price and billing cycle. Compare features and renewal terms before choosing.":
+        (Number(a.price)<Number(b.price)?a.provider:b.provider)+" is priced lower for the same billing cycle and currency. Check actual entitlements before deciding."):
+      "Prices or billing currencies/cycles are not comparable from the saved evidence. Review benefits, limits and verified checkout prices; no automatic winner was chosen.";
+    return {items,comparison:summary};
+  },
 
   settings: () => req<any>("/settings"),
   patchSettings: (b: any) => req<any>("/settings", { method: "PATCH", body: JSON.stringify(b) }),
