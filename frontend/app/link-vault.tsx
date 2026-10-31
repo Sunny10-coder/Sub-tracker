@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, SectionList, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useLinkTags, useLinks } from "@/src/lib/api";
+import { api, useInvalidateAll, useLinkTags, useLinks } from "@/src/lib/api";
 import { KIND_ICON, formatDate } from "@/src/lib/format";
 import { AppHeader, Chip, EmptyState, Icon, Loading } from "@/src/components/ui";
 import { accentFor, font, makeStyles, useTheme } from "@/src/theme";
@@ -24,7 +24,7 @@ const SECTION_ORDER = ["GitHub", "Instagram", "YouTube", "TikTok", "X / Twitter"
 type Link = {
   id: string; title: string; summary?: string; kind?: string; collection?: string; source?: string;
   tags?: string[]; use_cases?: string[]; repo?: { stars?: number; language?: string; description?: string };
-  reminder_due?: string; enrichment?: string; created_at?: string;
+  reminder_due?: string; enrichment?: string; created_at?: string; search_keywords?:string[];
 };
 
 export default function LinkVault() {
@@ -38,6 +38,11 @@ export default function LinkVault() {
   const [q, setQ] = useState("");
   const { data, isLoading } = useLinks();
   const tags = useLinkTags();
+  const invalidate=useInvalidateAll();
+  const [busy,setBusy]=useState(false),[progress,setProgress]=useState("");
+  const bulk=async()=>{setBusy(true);try{const result=await api.analyzeSavedLinks(10,(n,total)=>setProgress(n+"/"+total));
+    setProgress(result.analyzed+" analyzed, "+result.needs_review+" review, "+result.failed+" failed");invalidate();}
+    catch(e:any){setProgress(e?.message||"Analysis failed");}finally{setBusy(false);}};
 
   const sections = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -45,7 +50,7 @@ export default function LinkVault() {
       if (kind !== "all" && (l.kind || "article") !== kind) return false;
       if (tag && !(l.tags || []).includes(tag)) return false;
       if (!needle) return true;
-      return `${l.title} ${l.summary} ${(l.tags || []).join(" ")} ${(l.use_cases || []).join(" ")}`.toLowerCase().includes(needle);
+      return `${l.title} ${l.summary} ${(l.tags || []).join(" ")} ${(l.use_cases || []).join(" ")} ${(l.search_keywords||[]).join(" ")}`.toLowerCase().includes(needle);
     });
     const groups: Record<string, Link[]> = {};
     items.forEach((l) => { (groups[l.collection || "Websites"] ||= []).push(l); });
@@ -75,6 +80,14 @@ export default function LinkVault() {
         </ScrollView>
       ) : null}
 
+      <Pressable accessibilityRole="button" disabled={busy} onPress={bulk}
+        style={{paddingVertical:12,paddingHorizontal:16,flexDirection:"row",alignItems:"center",gap:9}}>
+        <Icon name="auto-fix" color={colors.brandPrimary} size={20}/>
+        <Text style={{color:colors.brandPrimary,fontWeight:"700"}}>
+          {busy?"Analyzing "+progress:"Smart Analyze existing links (up to 10)"}
+        </Text>
+      </Pressable>
+      {progress&&!busy?<Text style={{color:colors.muted,marginHorizontal:16,fontSize:12}}>{progress}</Text>:null}
       {isLoading ? (
         <Loading />
       ) : (

@@ -7,7 +7,7 @@ import { storage } from "@/src/utils/storage";
 import { getVault, localRequest, localInsights } from "@/src/lib/local-vault";
 import * as direct from "@/src/lib/direct-providers";
 import { recommendToolsForGoal, isGoalQuery } from "@/src/lib/tool-goal-matcher";
-import { publicGitHubMetadata } from "@/src/lib/link-intelligence";
+import { analyzePublicLink, suggestRelatedLinks, SMART_LINK_MAX_BULK } from "@/src/lib/smart-link-intelligence";
 
 const SERVER_KEY = "server_url";
 const BUILD_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
@@ -270,20 +270,41 @@ export const api = {
     const record=await localRequest<any>("/inbox/ingest-extraction",{method:"POST",body:JSON.stringify({source,extraction:extracted})});
     return record;
   },
+  analyzeLink: async (id:string,useAI=true) => {
+    const link=await api.link(id);
+    const update=await analyzePublicLink(link,useAI);
+    return api.updateLink(id,update);
+  },
+  relatedLinks: async (id:string) => {
+    const [link,links]=await Promise.all([api.link(id),api.links()]);
+    return suggestRelatedLinks(link,links);
+  },
+  analyzeSavedLinks: async (limit=SMART_LINK_MAX_BULK,onProgress?:(done:number,total:number)=>void) => {
+    const all=await api.links();
+    const candidates=all.filter((x:any)=>!x.analyzed_at||x.analysis_status==="needs_review")
+      .slice(0,Math.max(1,Math.min(SMART_LINK_MAX_BULK,limit)));
+    const summary={total:candidates.length,analyzed:0,needs_review:0,failed:0};
+    for(const item of candidates){
+      try{const result=await api.analyzeLink(String(item.id));if(result.analysis_status==="needs_review")summary.needs_review++;
+        else summary.analyzed++;}
+      catch{summary.failed++;}
+      onProgress?.(summary.analyzed+summary.needs_review+summary.failed,summary.total);
+    }
+    return summary;
+  },
   ingestLink: async (url:string,source="share",text="",
     extra:{tags?:string[];remind_in_days?:number}={}) => {
+    // Never hold up saving a bookmark because an external site or AI API fails.
     const item=await req<any>("/ingest/link",{method:"POST",body:JSON.stringify({url,source,text,...extra})});
-    if(!serverUrl&&item?.link_id&&!item?.duplicate){
+    if(item?.link_id){
       try{
-        const more=await publicGitHubMetadata(url);
-        if(more){
-          const saved=await localRequest<any>("/links/"+encodeURIComponent(item.link_id),{
-            method:"PATCH",body:JSON.stringify({...more,
-              tags:Array.from(new Set([...(item.link?.tags||[]),...(more.tags||[])]))})
-          });
-          return {...item,link:saved};
+        const link=await api.link(String(item.link_id));
+        const stale=!link.analyzed_at||link.analysis_status==="needs_review";
+        if(stale){
+          const saved=await api.analyzeLink(String(item.link_id));
+          return {...item,link:saved,analysis_status:saved.analysis_status};
         }
-      }catch{ /* GitHub metadata is optional, the local bookmark is already saved. */ }
+      }catch{/* Keep the saved bookmark and its original tags. */}
     }
     return item;
   },
