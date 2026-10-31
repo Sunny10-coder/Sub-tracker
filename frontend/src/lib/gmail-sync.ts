@@ -32,7 +32,7 @@ export async function connectGmail(forceChooser = false): Promise<string> {
   configure();
   if (forceChooser) await GoogleSignin.signOut();
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-  const result = await GoogleSignin.signIn();
+  const result = await GoogleSignin.signIn({});
   if (!isSuccessResponse(result)) throw Error("Google sign-in was cancelled or did not succeed.");
   const email = String(result.data.user.email || "").toLowerCase();
   if (!email) throw Error("Google sign-in did not provide a mailbox address.");
