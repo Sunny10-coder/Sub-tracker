@@ -198,7 +198,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       if(!record)notFound();
       const amount=data.amount===undefined||data.amount===null?null:Number(data.amount);
       const date=string(data.date),currency=string(data.currency||record.currency);
-      if(amount===null||!Number.isFinite(amount)||amount<0||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!currency)
+      if(amount===null||!Number.isFinite(amount)||amount<0||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!currency)
         throw Error("Confirm an amount, currency and date before recording a payment.");
       record.payments=Array.isArray(record.payments)?record.payments:[];
       const prior=record.payments.find((p:Dict)=>p.amount===amount&&p.date===date&&p.currency===currency);
@@ -455,7 +455,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else if(route==="/ingest/text"&&method==="POST"){
       const raw=string(data.text).slice(0,12000);
       if(!raw)throw Error("Enter text to save.");
-      if(/\\b(?:otp|verification code|one.time code|recovery phrase|private key|password)\\b/i.test(raw))
+      if(/\b(?:otp|verification code|one.time code|recovery phrase|private key|password)\b/i.test(raw))
         throw Error("Remove credentials and verification codes before saving.");
       const entry={id:"inbox-"+uid(),source:string(data.source)||"manual",raw_text:raw,
         source_subject:"Manual note",status:"needs_review",confidence:0,created_at:nowIso(),
@@ -465,9 +465,9 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else if(route==="/ingest/email"&&method==="POST"){
       const raw=string(data.body).slice(0,16000);
       if(!raw)throw Error("Paste email text before processing.");
-      if(/\\b(?:one.time code|verification code|security code|recovery phrase|private key|password reset|your otp)\\b/i.test(raw))
+      if(/\b(?:one.time code|verification code|security code|recovery phrase|private key|password reset|your otp)\b/i.test(raw))
         throw Error("Security or verification email rejected.");
-      const header=(name:string)=>raw.match(new RegExp("^"+name+":\\\\s*(.+)$","im"))?.[1]?.trim()||"";
+      const header=(name:string)=>raw.match(new RegExp("^"+name+":\\s*(.+)$","im"))?.[1]?.trim()||"";
       const sender=string(data.sender)||header("From"),subject=string(data.subject)||header("Subject")||"Pasted email",to=string(data.to)||header("To");
       const candidate=classifyMail({id:"pasted-"+uid(),subject,from:sender,date:nowIso(),
         snippet:raw.slice(0,400),body:raw,labels:[]},to)[0];
