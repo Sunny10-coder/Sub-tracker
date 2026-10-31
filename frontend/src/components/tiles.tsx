@@ -1,14 +1,16 @@
 // Windows Phone style live tiles for the Start screen.
 // A Tile is a flat colored square (or wide rectangle). A tile given several `faces`
 // flips (rotateX) between them on a timer like a Lumia live tile. Reduce-motion is respected.
+import { LinearGradient } from "expo-linear-gradient";
 import React, { ReactNode, useEffect, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { AccessibilityInfo, Animated, Easing, GestureResponderEvent, Pressable, Text, View, useWindowDimensions } from "react-native";
 
 import { Icon } from "@/src/components/ui";
 import { TILE_GAP, font, makeStyles, useTheme } from "@/src/theme";
 
 const SCREEN_PAD = 12;
 const FLIP_MS = 320;
+const LEAN_DEG = 13;
 
 export function useTileSize() {
   const { width } = useWindowDimensions();
@@ -40,6 +42,24 @@ export function Tile({ title, icon, color, wide, small, badge, onPress, faces, i
   const [idx, setIdx] = useState(0);
   const [rot] = useState(() => new Animated.Value(0));
   const [press] = useState(() => new Animated.Value(1));
+  const [tiltX] = useState(() => new Animated.Value(0));   // degrees, toward the touch point
+  const [tiltY] = useState(() => new Animated.Value(0));
+  const [enter] = useState(() => new Animated.Value(0));   // 0 = hidden/turned away, 1 = in place
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  // Staggered "turn in" when the Start screen opens, like a Lumia start screen.
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      const reduce = await AccessibilityInfo.isReduceMotionEnabled();
+      if (!alive) return;
+      setReduceMotion(reduce);
+      if (reduce) { enter.setValue(1); return; }
+      Animated.timing(enter, { toValue: 1, duration: 520, delay: (delay % 1000) * 0.5 + (small ? 300 : 0), easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }).start();
+    };
+    void run();
+    return () => { alive = false; };
+  }, [enter, delay, small]);
   const faceCount = faces?.length ?? 0;
 
   useEffect(() => {
@@ -75,19 +95,61 @@ export function Tile({ title, icon, color, wide, small, badge, onPress, faces, i
   const h = small ? smallSize : height ?? square;
   const face = faceCount > 0 ? faces![idx % faceCount] : children;
 
-  const tilt = (to: number) => Animated.timing(press, { toValue: to, duration: 90, useNativeDriver: true }).start();
+  const tiltX_ = tiltX.interpolate({ inputRange: [-20, 20], outputRange: ["-20deg", "20deg"] });
+  const tiltY_ = tiltY.interpolate({ inputRange: [-20, 20], outputRange: ["-20deg", "20deg"] });
+  const enterY = enter.interpolate({ inputRange: [0, 1], outputRange: ["-80deg", "0deg"] });
+  const enterLift = enter.interpolate({ inputRange: [0, 1], outputRange: [28, 0] });
+
+  // The tile leans toward the finger (like pressing a physical slab) and springs back on release.
+  const lean = (e: GestureResponderEvent) => {
+    if (reduceMotion) return;
+    const { locationX, locationY } = e.nativeEvent;
+    const nx = Math.max(-1, Math.min(1, (locationX / w - 0.5) * 2));
+    const ny = Math.max(-1, Math.min(1, (locationY / h - 0.5) * 2));
+    Animated.parallel([
+      Animated.spring(tiltY, { toValue: nx * LEAN_DEG, useNativeDriver: true, speed: 40, bounciness: 0 }),
+      Animated.spring(tiltX, { toValue: -ny * LEAN_DEG, useNativeDriver: true, speed: 40, bounciness: 0 }),
+      Animated.timing(press, { toValue: 0.96, duration: 90, useNativeDriver: true }),
+    ]).start();
+  };
+  const settle = () => {
+    Animated.parallel([
+      Animated.spring(tiltY, { toValue: 0, useNativeDriver: true, speed: 14, bounciness: 10 }),
+      Animated.spring(tiltX, { toValue: 0, useNativeDriver: true, speed: 14, bounciness: 10 }),
+      Animated.timing(press, { toValue: 1, duration: 140, useNativeDriver: true }),
+    ]).start();
+  };
 
   return (
     <Pressable
       onPress={onPress}
-      onPressIn={() => tilt(0.95)}
-      onPressOut={() => tilt(1)}
+      onPressIn={lean}
+      onPressOut={settle}
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={hint ? `${title}. ${hint}` : title}
     >
-      <Animated.View style={{ width: w, height: h, transform: [{ scale: press }] }}>
-        <Animated.View style={[styles.tile, { backgroundColor: color, transform: [{ perspective: 900 }, { rotateX }] }]}>
+      <Animated.View
+        style={{
+          width: w, height: h, opacity: enter,
+          transform: [{ perspective: 760 }, { translateY: enterLift }, { rotateY: enterY }, { rotateX: tiltX_ }, { rotateY: tiltY_ }, { scale: press }],
+        }}
+      >
+        {/* slab edge: a darker copy of the tile sitting just below it gives the tile thickness */}
+        <View style={[styles.slab, { backgroundColor: color }]}>
+          <View style={styles.slabShade} />
+        </View>
+        <Animated.View style={[styles.tile, { backgroundColor: color, transform: [{ rotateX }] }]}>
+          <LinearGradient
+            pointerEvents="none"
+            colors={["rgba(255,255,255,0.20)", "rgba(255,255,255,0.03)", "rgba(0,0,0,0.28)"]}
+            locations={[0, 0.45, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.sheen}
+          />
+          <View pointerEvents="none" style={styles.edgeTop} />
+          <View pointerEvents="none" style={styles.edgeLeft} />
           {small ? (
             <View style={styles.smallBody}>
               {icon ? <Icon name={icon} size={26} color={colors.onAccent} /> : null}
@@ -131,7 +193,12 @@ export function TileLine({ children, strong }: { children: ReactNode; strong?: b
 }
 
 const useStyles = makeStyles((colors) => ({
-  tile: { flex: 1, padding: 10, justifyContent: "space-between", backfaceVisibility: "hidden" },
+  tile: { position: "absolute", top: 0, left: 0, right: 5, bottom: 5, padding: 10, justifyContent: "space-between", backfaceVisibility: "hidden", overflow: "hidden" },
+  slab: { position: "absolute", top: 5, left: 5, right: 0, bottom: 0, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.5, shadowRadius: 8, shadowOffset: { width: 3, height: 6 }, elevation: 8 },
+  slabShade: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  sheen: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  edgeTop: { position: "absolute", top: 0, left: 0, right: 0, height: 2, backgroundColor: "rgba(255,255,255,0.55)" },
+  edgeLeft: { position: "absolute", top: 0, left: 0, bottom: 0, width: 2, backgroundColor: "rgba(255,255,255,0.3)" },
   smallBody: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
   smallTitle: { color: colors.onAccent, fontSize: 10, fontWeight: "500" },
   faceArea: { flex: 1, justifyContent: "flex-start", gap: 2 },
@@ -142,7 +209,7 @@ const useStyles = makeStyles((colors) => ({
   line: { ...font.light, color: colors.onAccent, fontSize: 15, lineHeight: 19 },
   lineStrong: { fontWeight: "600", fontFamily: undefined },
   badge: {
-    position: "absolute", top: 8, right: 8, minWidth: 26, height: 26, paddingHorizontal: 6,
+    position: "absolute", top: 8, right: 14, minWidth: 26, height: 26, paddingHorizontal: 6,
     backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.onAccent, borderRadius: 13,
     alignItems: "center", justifyContent: "center",
   },
