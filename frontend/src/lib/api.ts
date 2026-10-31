@@ -7,7 +7,7 @@ import * as direct from "@/src/lib/direct-providers";
 async function req<T>(path:string,opts?:RequestInit):Promise<T>{
  if(path.startsWith("/deals/search")){const q=new URLSearchParams(path.split("?")[1]||"");return direct.deals(q.get("q")||"") as T}
  if(path==="/ai/chat"){const question=JSON.parse(String(opts?.body||"{}")).question;const vault=await getVault();
- const context="You are SubMind. Answer strictly from provided user records when discussing account status, renewals or spending. If unknown say unknown. Do not assume prices or billing. Private data:\n"+JSON.stringify({subscriptions:vault.subscriptions.slice(0,250),accounts:vault.accounts.slice(0,150),benefits:vault.benefits.slice(0,100)}).slice(0,24000);
+ const context="You are SubMind. Answer from user records, never invent renewals or verified coupons. Unknown status means unknown. Private data:\n"+JSON.stringify({subscriptions:vault.subscriptions.slice(0,160),accounts:vault.accounts.slice(0,100),benefits:vault.benefits.slice(0,60),links:vault.links.slice(0,80).map((l:any)=>({title:l.title,url:l.url,category:l.category,tags:l.tags})),promos:vault.promo_codes.slice(0,60),prompts:vault.prompts.slice(0,60).map((p:any)=>({title:p.title,category:p.category,tags:p.tags}))}).slice(0,32000);
  return direct.chat(question,context) as T}
  if(path==="/ai/chat/history")return [] as T;
  return localRequest<T>(path,opts);
@@ -18,6 +18,20 @@ export const api = {
   dealsSearch: (q: string, mode = "all", refresh = false) => req<any>(`/deals/search?q=${encodeURIComponent(q)}&mode=${mode}&refresh=${refresh}`),
   inspectDeal: (url: string) => req<any>("/deals/inspect", { method: "POST", body: JSON.stringify({ url }) }),
   promoCodes: () => req<any[]>("/deals/codes"),
+  promoSources: () => req<any[]>("/promo/sources"),
+  addPromoSource: (b: any) => req<any>("/promo/sources", { method: "POST", body: JSON.stringify(b) }),
+  updatePromoSource: (id: string, b: any) => req<any>("/promo/sources/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(b) }),
+  deletePromoSource: (id: string) => req<any>("/promo/sources/" + encodeURIComponent(id), { method: "DELETE" }),
+  promoFindings: () => req<any[]>("/promo/findings"),
+  savePromoFinding: (b: any) => req<any>("/promo/findings", { method: "POST", body: JSON.stringify(b) }),
+  deletePromoFinding: (id: string) => req<any>("/promo/findings/" + encodeURIComponent(id), { method: "DELETE" }),
+  prompts: () => req<any[]>("/prompts"),
+  createPrompt: (b: any) => req<any>("/prompts", { method: "POST", body: JSON.stringify(b) }),
+  updatePrompt: (id: string, b: any) => req<any>("/prompts/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(b) }),
+  deletePrompt: (id: string) => req<any>("/prompts/" + encodeURIComponent(id), { method: "DELETE" }),
+  mailboxes: () => req<any[]>("/mailboxes"),
+  reviewQueue: () => req<any[]>("/review-queue"),
+  importMail: (mailbox: string, records: any[]) => req<any>("/mail/ingest", { method: "POST", body: JSON.stringify({ mailbox, records }) }),
   savePromoCode: (b: any) => req<any>("/deals/codes", { method: "POST", body: JSON.stringify(b) }),
   priceHistory: (provider = "") => req<any[]>(`/deals/price-history?provider=${encodeURIComponent(provider)}`),
   trackPrice: (b: any) => req<any>("/deals/track-price", { method: "POST", body: JSON.stringify(b) }),
@@ -78,6 +92,11 @@ export const api = {
 
 // ------- hooks -------
 export const usePromoCodes = () => useQuery({ queryKey: ["promo-codes"], queryFn: api.promoCodes });
+export const usePromoSources = () => useQuery({ queryKey: ["promo-sources"], queryFn: api.promoSources });
+export const usePromoFindings = () => useQuery({ queryKey: ["promo-findings"], queryFn: api.promoFindings });
+export const usePrompts = () => useQuery({ queryKey: ["prompts"], queryFn: api.prompts });
+export const useMailboxes = () => useQuery({ queryKey: ["mailboxes"], queryFn: api.mailboxes });
+export const useReviewQueue = () => useQuery({ queryKey: ["review-queue"], queryFn: api.reviewQueue });
 export const usePriceHistory = (provider = "") => useQuery({ queryKey: ["price-history", provider], queryFn: () => api.priceHistory(provider) });
 export const useVaultDashboard = () => useQuery({ queryKey: ["vault-dashboard"], queryFn: api.vaultDashboard });
 export const useAccounts = () => useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
@@ -99,7 +118,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["promo-codes", "price-history", "vault-dashboard", "accounts", "insights", "subscriptions", "inbox", "links", "watchlist", "reminders", "link-reminder", "graph"].forEach((k) =>
+    ["promo-codes", "promo-sources", "promo-findings", "prompts", "mailboxes", "review-queue", "price-history", "vault-dashboard", "accounts", "insights", "subscriptions", "subscription", "inbox", "links", "link", "watchlist", "plan", "reminders", "link-reminder", "graph"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }

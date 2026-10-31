@@ -54,7 +54,7 @@ export default function PasteLink() {
       <FormScroll>
         <Card style={styles.hint}>
           <Icon name="information-outline" size={18} color={colors.brandPrimary} />
-          <Text style={styles.hintText}>We save the link instantly, then AI adds a summary, tags and category.</Text>
+          <Text style={styles.hintText}>Your link is saved and classified locally. You can optionally enhance its tags with Gemini from the saved link.</Text>
         </Card>
         <TextField label="URL" value={url} onChangeText={setUrl} placeholder="https://…" testID="link-url" />
         <PrimaryButton title="Paste from clipboard" icon="content-paste" variant="secondary" onPress={paste} testID="link-paste" />

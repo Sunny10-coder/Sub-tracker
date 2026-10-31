@@ -12,5 +12,5 @@ export default function Index() {
   }, []);
 
   if (seen === null) return <Loading />;
-  return <Redirect href={seen ? "/(tabs)" : "/onboarding"} />;
+  return <Redirect href={seen ? "/(tabs)/vault" : "/onboarding"} />;
 }

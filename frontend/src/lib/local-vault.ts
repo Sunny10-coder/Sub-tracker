@@ -3,20 +3,28 @@
  * Android stores this JSON in app-private storage; this is NOT an encrypted backup.
  */
 import { storage } from "@/src/utils/storage";
+import { classifyLink, canonicalUrl, graphFromVault, inferCategory, inferTags } from "@/src/lib/vault-intelligence";
 
 export const LOCAL_VAULT_KEY = "submind.private.import.v1";
 type Dict = Record<string, any>;
 type Vault = { schema: string; subscriptions: Dict[]; accounts: Dict[]; watchlist: Dict[];
-  promo_codes: Dict[]; mail_activity: Dict[]; review_queue: Dict[];
+  promo_codes: Dict[]; mail_activity: Dict[]; review_queue: Dict[]; prompts: Dict[]; mailboxes: Dict[]; promo_sources: Dict[]; promo_findings: Dict[];
   benefits: Dict[]; links: Dict[]; reminders: Dict[]; price_snapshots: Dict[]; settings: Dict; imported_at?: string };
 const EMPTY:Vault={schema:"submind-import-v1",subscriptions:[],accounts:[],watchlist:[],
- promo_codes:[],mail_activity:[],review_queue:[],benefits:[],links:[],reminders:[],price_snapshots:[],
+ promo_codes:[],mail_activity:[],review_queue:[],prompts:[],mailboxes:[],promo_sources:[],promo_findings:[],benefits:[],links:[],reminders:[],price_snapshots:[],
  settings:{currency:"AED",ai_enabled:true,price_monitoring:false,auto_add_threshold:0.95}};
 
-function normalized(s:any):string{return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+function lower(s:any):string{return String(s||"").toLowerCase()}
+function normalized(s:any):string{return lower(s).replace(/[^a-z0-9]/g,"")}
 function string(s:any):string{return typeof s==="string"?s.trim():""}
 function asArray(x:any):Dict[]{return Array.isArray(x)?x.filter(v=>v&&typeof v==="object"):[]}
-function copy(v:Vault):Vault{return {...EMPTY,...v,settings:{...EMPTY.settings,...v.settings}}}
+function copy(v:Vault):Vault{
+ const merged={...EMPTY,...v,settings:{...EMPTY.settings,...v.settings}};
+ for(const k of ["subscriptions","accounts","watchlist","promo_codes","mail_activity","review_queue","prompts","mailboxes","promo_sources","promo_findings","benefits","links","reminders","price_snapshots"] as const) {
+  (merged as any)[k]=asArray((v as any)[k]);
+ }
+ return merged;
+}
 function ident(s:Dict):string{return [normalized(s.provider||s.Provider||s.Service),
  normalized(s.product||s.Product),normalized(s.plan||s.Plan),
  normalized(s.account_email||s.email||s["Stated account email"]),
@@ -57,7 +65,7 @@ function mutate<T>(fn:()=>Promise<T>):Promise<T>{
 export async function getVault():Promise<Vault>{
  const raw=await storage.getItem(LOCAL_VAULT_KEY,"");
  if(typeof raw!=="string"||!raw)return copy(EMPTY);
- try{return copy(JSON.parse(raw))}catch{return copy(EMPTY)}
+ try{const parsed=JSON.parse(raw);return parsed && typeof parsed==="object" ? copy(parsed):copy(EMPTY)}catch{return copy(EMPTY)}
 }
 async function save(v:Vault):Promise<void>{
  if(!await storage.setItem(LOCAL_VAULT_KEY,JSON.stringify(v)))throw Error("Could not save data in phone storage");
@@ -74,8 +82,14 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
    watchlist:asArray(data.watchlist).map(normalizeWatch),
    promo_codes:asArray(data.promo_codes).map(normalizePromo),
    review_queue:asArray(data.review_queue).map((a,i)=>({...a,id:a.id||"review-"+normalized([a.source_row,a.provider,a.field,a.reason,i].join("|"))})),
-   benefits:asArray(data.benefits),
-   mail_activity:asArray(data.mail_activity)
+   benefits:asArray(data.benefits).map((b,i)=>({...b,id:b.id||"benefit-import-"+i+"-"+normalized(b.provider||b.name)})),
+   mail_activity:asArray(data.mail_activity).map((m,i)=>({...m,id:m.id||"activity-import-"+i+"-"+normalized(m.source_key)})),
+   prompts:asArray(data.prompts).map((p,i)=>({...p,id:p.id||"prompt-import-"+i+"-"+normalized(p.title)})),
+   links:asArray(data.links).map((l,i)=>({...l,id:l.id||"link-import-"+i+"-"+normalized(l.url)})),
+   reminders:asArray(data.reminders).map((r,i)=>({...r,id:r.id||"rem-import-"+i})),
+   mailboxes:asArray(data.mailboxes).map((m,i)=>({...m,id:m.id||"mailbox-"+normalized(m.email)||"mailbox-"+i})),
+   promo_sources:asArray(data.promo_sources).map((s,i)=>({...s,id:s.id||"source-import-"+i+"-"+normalized(s.provider)})),
+   promo_findings:asArray(data.promo_findings).map((f,i)=>({...f,id:f.id||"finding-import-"+i+"-"+normalized(f.source_url)}))
   };
   const added:Dict={},duplicates:Dict={};
   for(const k of Object.keys(inbound)){
@@ -84,6 +98,11 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
     added[k]=array.filter(x=>!existingKeys.has(String(x.id))).length;
     duplicates[k]=array.length-added[k];
     (vault as any)[k]=mergeById(existing,array);
+  }
+  if(data.settings&&typeof data.settings==="object"&&!Array.isArray(data.settings)){
+    for(const k of ["currency","ai_enabled","keep_screenshots","price_monitoring","auto_add_threshold"]){
+      if(Object.prototype.hasOwnProperty.call(data.settings,k))vault.settings[k]=data.settings[k];
+    }
   }
   vault.imported_at=new Date().toISOString();await save(vault);
   return {added,duplicates,review:vault.review_queue.length};
@@ -145,7 +164,11 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  const params=new URLSearchParams(qs||"");const data=jsonBody(opts);
  if(method!=="GET")return mutate(async()=>{const v=await getVault();let result:any=null;
    const collection=(name:keyof Vault)=>((v[name] as Dict[])||[]);
-   if(route==="/subscriptions"&&method==="POST"){
+   if(route==="/subscriptions/check-duplicate"&&method==="POST"){
+      const existing=v.subscriptions.find(x=>normalized(x.provider)===normalized(data.provider)
+        &&normalized(x.plan)===normalized(data.plan)&&string(x.account_email)===string(data.account_email));
+      result={duplicate:Boolean(existing),existing_id:existing?.id||null,subscription:existing||null};
+   }else if(route==="/subscriptions"&&method==="POST"){
       const rec=normalizeSub({...data,id:"sub-"+uid(),created_at:nowIso()});
       if(v.subscriptions.some(x=>normalized(x.provider)===normalized(rec.provider)
        &&normalized(x.plan)===normalized(rec.plan)&&string(x.account_email)&&string(x.account_email)===string(rec.account_email)))
@@ -174,6 +197,18 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       else {if(!x)notFound();Object.assign(x,data);result=x;}
    }else if(route==="/watchlist"&&method==="POST"){
       const rec=normalizeWatch({...data,id:"watch-"+uid()});v.watchlist.unshift(rec);result=rec;
+   }else if(route.startsWith("/watchlist/")&&route.endsWith("/convert")&&method==="POST"){
+      const id=route.split("/")[2];const plan=v.watchlist.find(x=>x.id===id);
+      if(!plan)notFound();
+      const existing=v.subscriptions.find(s=>normalized(s.provider)===normalized(plan.provider)&&normalized(s.plan)===normalized(plan.plan)
+        &&string(s.account_email)===string(plan.account_email||""));
+      if(existing)result={duplicate:true,subscription_id:existing.id,subscription:existing};
+      else{
+        const sub=normalizeSub({...plan,id:"sub-"+uid(),status:"Unknown",review_required:true,
+          source:"watchlist",created_at:nowIso(),account_email:string(plan.account_email),billing_cycle:plan.billing_cycle||"unknown"});
+        v.subscriptions.unshift(sub);plan.status="Moved to plans";
+        result={duplicate:false,subscription_id:sub.id,subscription:sub};
+      }
    }else if(route.startsWith("/watchlist/")&&method==="DELETE"){
       v.watchlist=v.watchlist.filter(a=>a.id!==route.split("/")[2]);result={ok:true};
    }else if(route==="/deals/codes"&&method==="POST"){
@@ -182,18 +217,111 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
        &&normalized(a.code)===normalized(rec.code)&&string(a.account_email)===string(rec.account_email));
       if(existing)return {duplicate:true,item:existing} as T;
       v.promo_codes.unshift(rec);result={duplicate:false,item:rec};
+   }else if(route==="/prompts"&&method==="POST"){
+      const title=string(data.title);const body=string(data.text);
+      if(!title||!body)throw Error("Prompt title and text are required");
+      const rec={id:"prompt-"+uid(),title,text:body,category:inferCategory(title+" "+body),tags:inferTags(title+" "+body,Array.isArray(data.tags)?data.tags.filter((x:any)=>typeof x==="string").map((x:string)=>x.trim()):[]),related_ids:[],created_at:nowIso(),...data};
+      v.prompts.unshift(rec);result=rec;
+   }else if(route.startsWith("/prompts/")&&method==="PATCH"){
+      const rec=v.prompts.find(x=>x.id===route.split("/")[2]);if(!rec)notFound();
+      Object.assign(rec,data,{updated_at:nowIso()});result=rec;
+   }else if(route.startsWith("/prompts/")&&method==="DELETE"){
+      v.prompts=v.prompts.filter(x=>x.id!==route.split("/")[2]);result={ok:true};
+   }else if(route==="/mail/ingest"&&method==="POST"){
+      const mailbox=string(data.mailbox).toLowerCase();const rows=asArray(data.records);
+      if(!mailbox||rows.length>250)throw Error("Invalid mailbox or too many records");
+      const seen=new Set([...v.review_queue,...v.mail_activity].map(x=>string(x.source_key)));
+      let added=0;
+      for(const incoming of rows){
+        const source_key=mailbox+":"+string(incoming.message_id)+":"+string(incoming.type);
+        if(!incoming.message_id||!["subscription","account","promo"].includes(incoming.type)||seen.has(source_key))continue;
+        const record={...incoming,id:"mail-"+uid(),source_key,mailbox_email:mailbox,
+          status:"needs_review",created_at:nowIso(),review_required:true,
+          confidence:Math.min(1,Math.max(0,Number(incoming.confidence)||0))};
+        v.review_queue.unshift(record);seen.add(source_key);added++;
+      }
+      const old=v.mailboxes.find(x=>x.email===mailbox);
+      if(old){old.last_synced_at=nowIso();old.last_scan_count=rows.length;}
+      else v.mailboxes.push({id:"mailbox-"+normalized(mailbox),email:mailbox,last_synced_at:nowIso(),last_scan_count:rows.length});
+      result={added,duplicates:rows.length-added,mailbox,review_pending:v.review_queue.filter(x=>x.status==="needs_review").length};
+   }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
+      const id=route.split("/")[2];const entry=v.review_queue.find(x=>x.id===id);
+      if(!entry)notFound();
+      if(entry.status!=="needs_review")throw Error("This record was already reviewed");
+      const action=string(data.action);
+      if(action!=="approve"&&action!=="dismiss")throw Error("Choose approve or dismiss");
+      entry.status=action==="approve"?"approved":"dismissed";
+      entry.reviewed_at=nowIso();
+      if(action==="approve"){
+        const rec={...(entry.extraction||{}),...(data.edits||{})};const email=string(rec.account_email||entry.mailbox_email).toLowerCase();
+        if(entry.type==="account"){
+          if(rec.provider&&!v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&string(a.email)===email)){
+            v.accounts.unshift(normalizeAccount({provider:rec.provider,email,status:"Created",source:"gmail",source_key:entry.source_key,id:"acct-"+uid()}));
+          }
+        }else if(entry.type==="subscription"){
+          if(rec.provider&&!v.subscriptions.some(s=>normalized(s.provider)===normalized(rec.provider)&&string(s.account_email)===email&&normalized(s.plan)===normalized(rec.plan))){
+            const sub=normalizeSub({...rec,account_email:email,source:"gmail",status:rec.trial_end?"Trial":"Unknown",
+              review_required:true,id:"sub-"+uid()});
+            v.subscriptions.unshift(sub);
+          }
+          if(rec.provider&&email&&!v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&string(a.email)===email)){
+            v.accounts.unshift(normalizeAccount({provider:rec.provider,email,status:"Created",source:"gmail",id:"acct-"+uid()}));
+          }
+        }else if(entry.type==="promo"){
+          const code=string(rec.code);
+          if(rec.provider&&!v.promo_codes.some(p=>normalized(p.provider)===normalized(rec.provider)&&normalized(p.code)===normalized(code)&&string(p.source_key)===entry.source_key)){
+            v.promo_codes.unshift(normalizePromo({...rec,source:"gmail",source_key:entry.source_key,
+              account_email:email,id:"promo-"+uid(),verified:false}));
+          }
+        }
+      }
+      v.mail_activity.unshift({id:"mail-action-"+uid(),source_key:entry.source_key,
+        type:entry.type,mailbox_email:entry.mailbox_email,provider:entry.extraction?.provider,
+        action,recorded_at:nowIso()});
+      result={ok:true,status:entry.status};
+   }else if(route==="/promo/sources"&&method==="POST"){
+      const provider=string(data.provider).slice(0,100);
+      const keywords=string(data.keywords).slice(0,150);
+      if(!provider)throw Error("Enter the source or provider to monitor");
+      const existing=v.promo_sources.find(x=>normalized(x.provider)===normalized(provider)&&normalized(x.keywords)===normalized(keywords));
+      if(existing)result=existing;
+      else{const rec={id:"src-"+uid(),provider,keywords,source_url:string(data.source_url).slice(0,400),
+       enabled:true,created_at:nowIso(),last_checked_at:null};v.promo_sources.unshift(rec);result=rec;}
+   }else if(route.startsWith("/promo/sources/")&&method==="PATCH"){
+      const item=v.promo_sources.find(x=>x.id===route.split("/")[3]);if(!item)notFound();
+      Object.assign(item,data,{updated_at:nowIso()});result=item;
+   }else if(route.startsWith("/promo/sources/")&&method==="DELETE"){
+      v.promo_sources=v.promo_sources.filter(x=>x.id!==route.split("/")[3]);result={ok:true};
+   }else if(route==="/promo/findings"&&method==="POST"){
+      const url=canonicalUrl(string(data.source_url));
+      const existing=v.promo_findings.find(x=>x.source_url===url);
+      if(existing){Object.assign(existing,{last_seen_at:nowIso(),...data,source_url:url});result={duplicate:true,item:existing};}
+      else{const rec={...data,id:"finding-"+uid(),source_url:url,verified:false,
+        status:"unverified",created_at:nowIso(),last_seen_at:nowIso(),
+        tags:inferTags([data.title,data.provider,data.description].join(" "),["deals"])};v.promo_findings.unshift(rec);
+        result={duplicate:false,item:rec};}
+   }else if(route.startsWith("/promo/findings/")&&method==="DELETE"){
+      v.promo_findings=v.promo_findings.filter(x=>x.id!==route.split("/")[3]);result={ok:true};
    }else if(route==="/settings"&&method==="PATCH"){
       v.settings={...v.settings,...data};result=v.settings;
    }else if(route==="/links"&&method==="POST"){
-      const url=String(data.url||"");const existing=v.links.find(l=>l.url===url);
-      if(existing)result=existing;else{const rec={id:"link-"+uid(),created_at:nowIso(),...data};v.links.unshift(rec);result=rec}
+      const classified=classifyLink(String(data.url||""),String(data.note||""),String(data.source||"share"));
+      const existing=v.links.find(l=>l.canonical_url===classified.canonical_url);
+      if(existing)result=existing;else{const rec={...classified,...data,id:"link-"+uid(),created_at:nowIso()};v.links.unshift(rec);result=rec}
    }else if(route==="/ingest/link"&&method==="POST"){
-      const raw=String(data.url||"").trim();const canonical=raw.replace(/[?#].*$/,"").replace(/\/$/,"");
-      const existing=v.links.find(l=>l.canonical_url===canonical);
-      if(existing)result={link_id:existing.id,duplicate:true,link:existing};
-      else{const rec={id:"link-"+uid(),url:raw,canonical_url:canonical,title:raw,source:data.source||"share",
-       note:data.text||"",category:"Other",created_at:nowIso()};
-       v.links.unshift(rec);result={link_id:rec.id,duplicate:false,link:rec}}
+      const classified=classifyLink(String(data.url||""),String(data.text||""),String(data.source||"share"));
+      const existing=v.links.find(l=>l.canonical_url===classified.canonical_url);
+      let target:Dict;
+      if(existing){target=existing;result={link_id:existing.id,duplicate:true,link:existing};}
+      else{const rec={...classified,id:"link-"+uid(),created_at:nowIso()};
+       v.links.unshift(rec);target=rec;result={link_id:rec.id,duplicate:false,link:rec};}
+      if(string(data.reminder_date)){
+        let reminder=v.reminders.find(r=>r.ref_type==="link"&&r.ref_id===target.id&&!r.completed);
+        if(!reminder){reminder={id:"rem-"+uid(),ref_id:target.id,ref_type:"link",completed:false,created_at:nowIso()};v.reminders.unshift(reminder);}
+        Object.assign(reminder,{title:string(data.reminder_title)||"Review saved link",due_date:data.reminder_date,
+          remind_time:string(data.reminder_time)||"09:00"});
+        target.reminder_id=reminder.id;
+      }
    }else if(route==="/deals/track-price"&&method==="POST"){
       const rec={id:"price-"+uid(),checked_at:nowIso(),...data};
       v.price_snapshots.unshift(rec);result={duplicate:false,record:rec,change:null};
@@ -209,7 +337,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else{throw Error("This action needs an optional backend or is not available offline: "+route)}
    await save(v);return result as T;
  });
- const v=await getVault();const accounts=v.accounts.map(a=>({...a,
+ const v=await getVault();const accounts:Dict[]=v.accounts.map((a:Dict)=>({...a,
   plans:v.subscriptions.filter(s=>(s.account_email&&a.email&&s.account_email===a.email&&normalized(s.provider)===normalized(a.provider)))
    .map(s=>({id:s.id,plan:s.plan,status:s.status})),
   active_plans:v.subscriptions.filter(s=>(s.account_email&&a.email&&s.account_email===a.email&&normalized(s.provider)===normalized(a.provider))
@@ -228,15 +356,27 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  else if(route==="/watchlist")result=v.watchlist;
  else if(route.startsWith("/watchlist/"))result=v.watchlist.find(x=>x.id===route.split("/")[2])||notFound();
  else if(route==="/deals/codes")result=v.promo_codes;
+ else if(route==="/promo/sources")result=v.promo_sources;
+ else if(route==="/promo/findings")result=v.promo_findings;
+ else if(route==="/prompts")result=v.prompts;
+ else if(route.startsWith("/prompts/"))result=v.prompts.find(x=>x.id===route.split("/")[2])||notFound();
+ else if(route==="/mailboxes")result=v.mailboxes;
+ else if(route==="/review-queue")result=v.review_queue.filter(x=>x.status==="needs_review");
  else if(route==="/deals/price-history")result=v.price_snapshots.filter(x=>!params.get("provider")||normalized(x.provider).includes(normalized(params.get("provider"))));
  else if(route==="/links")result=v.links;
  else if(route.startsWith("/links/")&&route.endsWith("/reminder"))result=v.reminders.find(r=>r.ref_type==="link"&&r.ref_id===route.split("/")[2]&&!r.completed)||null;
  else if(route.startsWith("/links/"))result=v.links.find(x=>x.id===route.split("/")[2])||notFound();
  else if(route==="/reminders")result=v.reminders;
  else if(route==="/settings")result=v.settings;
- else if(route==="/inbox")result=[];
- else if(route==="/graph")result={nodes:[],edges:[]};
- else if(route.startsWith("/search"))result={subscriptions:v.subscriptions.filter(s=>normalized(s.provider).includes(normalized(params.get("q")))).slice(0,50),links:[],plans:[],reminders:[]};
+ else if(route==="/inbox")result=v.review_queue.filter(x=>x.status==="needs_review"&&
+   (!params.get("tab")||params.get("tab")==="all"||params.get("tab")==="All"||lower(x.type)===lower(params.get("tab"))));
+ else if(route==="/graph")result=graphFromVault(v);
+ else if(route.startsWith("/search")){
+   const q=lower(params.get("q")).trim();const has=(x:Dict)=>lower([x.provider,x.title,x.text,x.code,x.url,x.email,x.plan,(x.tags||[]).join(" ")].join(" ")).includes(q);
+   result={subscriptions:v.subscriptions.filter(has).slice(0,50),links:v.links.filter(has).slice(0,50),
+     prompts:v.prompts.filter(has).slice(0,50),promos:v.promo_codes.filter(has).slice(0,50),promo_findings:v.promo_findings.filter(has).slice(0,50),
+     accounts:v.accounts.filter(has).slice(0,50),plans:v.watchlist.filter(has).slice(0,50),reminders:v.reminders.filter(has).slice(0,50)};
+ }
  else throw Error("This feature requires a backend or AI API configuration: "+route);
  return result as T;
 }
