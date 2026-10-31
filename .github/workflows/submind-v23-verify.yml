@@ -1,0 +1,41 @@
+name: Verify SubMind 2.3 Unified Vault
+
+on:
+  push:
+    branches:
+      - feature/submind-unified-vault-gmail-20261031
+    paths:
+      - '.github/workflows/submind-v23-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+      EXPO_PUBLIC_BACKEND_URL: ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enable Yarn
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install dependencies
+        run: yarn install --non-interactive --no-lockfile
+      - name: TypeScript validation
+        run: npx tsc --noEmit --pretty false
+      - name: Validate Expo Android configuration
+        run: npx expo config --type prebuild > /dev/null
+      - name: Bundle Android JavaScript
+        run: npx expo export --platform android --output-dir .submind-ci-dist
