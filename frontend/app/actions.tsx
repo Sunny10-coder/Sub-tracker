@@ -16,6 +16,7 @@ const ACTIONS = [
   { icon: "bell-plus", label: "Add reminder", color: "accentYellow", href: "/add-reminder" },
   { icon: "note-plus", label: "Add note", color: "accentBlue", href: "/add-note" },
   { icon: "robot-happy", label: "Ask AI", color: "accentPink", href: "/(tabs)/ai" },
+  { icon: "apps", label: "More tools", color: "accentBlue", href: "/restored-tools" },
 ] as const;
 
 export default function Actions() {

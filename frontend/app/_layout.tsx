@@ -10,6 +10,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/src/components/error-boundary";
 import { initServerUrl } from "@/src/lib/api";
+import { autoSyncGmailOnLaunch } from "@/src/lib/automatic-mail-sync";
+import { Platform } from "react-native";
 import { queryClient } from "@/src/query-client";
 import { useTheme } from "@/src/theme";
 
@@ -24,6 +26,11 @@ export default function RootLayout() {
 
   // Load the server address saved in Settings before any screen makes a request.
   const [serverReady, setServerReady] = useState(false);
+  useEffect(() => {
+    // Best effort: scan registered, authorised Gmail accounts when Android app opens.
+    // This does not claim closed-app/background delivery or request a new sign-in.
+    if (Platform.OS === "android") void autoSyncGmailOnLaunch().catch(() => {});
+  }, []);
   useEffect(() => {
     const load = async () => {
       try {

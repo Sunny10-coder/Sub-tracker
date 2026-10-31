@@ -2,7 +2,7 @@
   "expo": {
     "name": "SubMind",
     "slug": "frontend",
-    "version": "1.0.0",
+    "version": "2.6.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "submind",
@@ -21,13 +21,14 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.emergent.subscriptionvault.z533ca",
+      "package": "com.submind.metro",
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
         "READ_MEDIA_IMAGES",
         "POST_NOTIFICATIONS"
-      ]
+      ],
+      "versionCode": 7
     },
     "web": {
       "bundler": "metro",
@@ -59,7 +60,20 @@
           "cameraPermission": "Scan subscription screenshots and receipts"
         }
       ],
-      "@react-native-vector-icons/material-design-icons"
+      "@react-native-vector-icons/material-design-icons",
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-sharing",
+        {
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": [
+              "text/plain"
+            ],
+            "multipleShareMimeTypes": []
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

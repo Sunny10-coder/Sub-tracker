@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, useInvalidateAll, useWatchlist } from "@/src/lib/api";
@@ -60,9 +60,11 @@ export default function Watchlist() {
                   </Pressable>
                   <Pressable onPress={() => convert.mutate(item.id)} style={styles.act}>
                     <Icon name="arrow-up-bold-box-outline" size={15} color={colors.brandSecondary} />
-                    <Text style={[styles.actText, { color: colors.brandSecondary }]}>Subscribe</Text>
+                    <Text style={[styles.actText, { color: colors.brandSecondary }]}>Move to plans</Text>
                   </Pressable>
-                  <Pressable onPress={() => del.mutate(item.id)} style={styles.act}>
+                  <Pressable onPress={() => Alert.alert("Remove plan?","Remove this saved watchlist item? This does not cancel any external subscription.",[
+                    {text:"Keep",style:"cancel"},{text:"Remove",style:"destructive",onPress:()=>del.mutate(item.id)}
+                  ])} style={styles.act}>
                     <Icon name="trash-can-outline" size={15} color={colors.muted} />
                   </Pressable>
                 </View>

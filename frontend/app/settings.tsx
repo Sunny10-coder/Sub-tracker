@@ -59,6 +59,17 @@ export default function Settings() {
       <AppHeader title="Settings" back />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 30, gap: 16 }} showsVerticalScrollIndicator={false}>
         {serverCard}
+        <Section title="Connections & private data">
+          <View style={{gap:9,paddingVertical:9}}>
+            <PrimaryButton title="Connect and sync Gmail" icon="gmail" variant="secondary" onPress={()=>router.push("/gmail-sync")}/>
+            <PrimaryButton title="Configure AI providers and models" icon="key-variant" variant="secondary" onPress={()=>router.push("/api-keys")}/>
+            <PrimaryButton title="Import preloaded SubMind records" icon="file-import" variant="secondary" onPress={()=>router.push("/import-data")}/>
+            <PrimaryButton title="Export private JSON backup" icon="database-export" variant="secondary" onPress={()=>router.push("/export-data")}/>
+            <PrimaryButton title="Browse Brain Map and tools" icon="brain" variant="secondary" onPress={()=>router.push("/tool-brain")}/>
+            <PrimaryButton title="Review pending email findings" icon="inbox-arrow-down" variant="secondary" onPress={()=>router.push("/mail-review")}/>
+            <Text style={styles.sub}>Private imports and Gmail findings stay in on-device storage. Optional Claude backend data is displayed alongside it when connected. A Gmail connection requires the final APK certificate registered with Google.</Text>
+          </View>
+        </Section>
 
         <Section title="Cancel reminders">
           <View style={styles.rowCol}>

@@ -1,6 +1,7 @@
 """SubMind backend — FastAPI + MongoDB + Gemini (Emergent universal key)."""
 import os
 import re
+import math
 import json
 import uuid
 import logging
@@ -927,14 +928,40 @@ async def update_subscription(sid: str, body: Dict[str, Any]):
 
 @api.post("/subscriptions/{sid}/payment")
 async def record_payment(sid: str, body: Dict[str, Any]):
+    """Record only a user-confirmed payment; reject duplicates and unknown charges."""
     doc = await db.subscriptions.find_one({"id": sid, "user_id": USER_ID})
     if not doc:
         raise HTTPException(404, "Not found")
-    payments = doc.get("payments", [])
-    payments.append({"amount": body.get("amount", doc.get("price")),
-                     "currency": doc.get("currency", "AED"), "date": body.get("date", now_iso())})
-    await db.subscriptions.update_one({"id": sid}, {"$set": {"payments": payments, "updated_at": now_iso()}})
-    return {"ok": True, "payments": payments}
+    raw_amount = body.get("amount")
+    if isinstance(raw_amount, bool) or raw_amount is None:
+        raise HTTPException(422, "Confirm the actual charged amount.")
+    try:
+        amount = float(raw_amount)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "Invalid payment amount.")
+    if not math.isfinite(amount) or amount < 0:
+        raise HTTPException(422, "Payment amount must be finite and non-negative.")
+    currency = str(body.get("currency") or doc.get("currency") or "").strip().upper()
+    if not re.fullmatch(r"[A-Z]{3,5}", currency):
+        raise HTTPException(422, "Confirm payment currency.")
+    paid_on = str(body.get("date") or "").strip()
+    try:
+        datetime.strptime(paid_on, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(422, "Confirm payment date in YYYY-MM-DD format.")
+    payments = doc.get("payments") or []
+    prior = next((p for p in payments
+                  if str(p.get("date", ""))[:10] == paid_on and
+                  str(p.get("currency", "")).upper() == currency and
+                  isinstance(p.get("amount"), (int, float)) and
+                  float(p["amount"]) == amount), None)
+    if prior:
+        return {"ok": True, "duplicate": True, "payments": payments}
+    payments.append({"amount": amount, "currency": currency,
+                     "date": paid_on, "source": "manual-confirmed"})
+    await db.subscriptions.update_one({"id": sid, "user_id": USER_ID},
+                                      {"$set": {"payments": payments, "updated_at": now_iso()}})
+    return {"ok": True, "duplicate": False, "payments": payments}
 
 
 @api.delete("/subscriptions/{sid}")
