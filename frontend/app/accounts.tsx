@@ -56,7 +56,7 @@ export default function Accounts() {
      </Pressable>
      <View style={{backgroundColor:"#1C2130",borderRadius:11,paddingHorizontal:13,flexDirection:"row",alignItems:"center",gap:9}}>
        <Icon name="magnify" color="#95A3B6" size={21}/>
-       <TextInput placeholder="Search a service or sign-in email" placeholderTextColor="#8994A4" value={search} onChangeText={setSearch}
+       <TextInput placeholder="Search a service or sign-in email" placeholderTextColor="#8994A4" value={search} onChangeText={setSearch} autoCapitalize="none"
          style={{color:METRO.white,flex:1,paddingVertical:15,fontSize:14,autoCapitalize:"none"} as any}/>
      </View>
      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>
