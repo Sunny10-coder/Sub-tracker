@@ -148,6 +148,11 @@ export function graphFromVault(v: VaultItem): { nodes: VaultItem[]; edges: Vault
     const p = provider(promo.provider); if (p) connect(id, p, "offered-by");
     tagsFor(id, { category: "Deals", tags: promo.tags || [] });
   }
+  for (const finding of (v.promo_findings || []).slice(0, 70)) {
+    const id = add("promo", finding.id, finding.title || finding.provider, { ref_id: finding.id });
+    const p = provider(finding.provider); if (p) connect(id, p, "discovered");
+    tagsFor(id, { category: "Deals", tags: finding.tags || [] });
+  }
   for (const w of (v.watchlist || []).slice(0, 40)) {
     const id = add("plan", w.id, [w.provider, w.plan].filter(Boolean).join(" · "), { ref_id: w.id });
     const p = provider(w.provider); if (p) connect(id, p, "watching");
