@@ -780,7 +780,7 @@
   dependencies:
     node-forge "^1.3.3"
 
-"@expo/config-plugins@~57.0.10", "@expo/config-plugins@~57.0.11", "@expo/config-plugins@~57.0.9":
+"@expo/config-plugins@^57.0.11", "@expo/config-plugins@~57.0.10", "@expo/config-plugins@~57.0.11", "@expo/config-plugins@~57.0.9":
   version "57.0.11"
   resolved "https://registry.yarnpkg.com/@expo/config-plugins/-/config-plugins-57.0.11.tgz#8ede13d2b3bea6fa02873439fc0a350562b4ca3e"
   integrity sha512-lnNF0cNXqLQPpQVeb/AAu7O0KhdwMFx99rJkO11mrd0IbQDhnOVObpgaR/Ja2D1jAOoKuqk55jwS4l+ZD1j7aw==
@@ -1433,6 +1433,11 @@
   integrity sha512-gvRvjR5JAaUZF8tv2Kcq/Gbt3JHwbKFYfmb445rhOj6NUMx3qPLixmDx5pZAyb9at1bYvJ4/eTUipU5aki45xw==
   dependencies:
     merge-options "^3.0.4"
+
+"@react-native-google-signin/google-signin@16.1.5":
+  version "16.1.5"
+  resolved "https://registry.yarnpkg.com/@react-native-google-signin/google-signin/-/google-signin-16.1.5.tgz#0de2624f291050b1e7bd935919cdd06080f13bb0"
+  integrity sha512-9rmMwACzHK9Cbd0Yp7efg5uWgiYoLwmNAJh4gRCuMcSQH+qplpK7E4d1Q4tbsD8M9jvvVtRX2Z0AP9wwBKmPrQ==
 
 "@react-native-masked-view/masked-view@^0.3.2":
   version "0.3.2"
@@ -3308,7 +3313,12 @@ expo-doctor@1.19.8:
   resolved "https://registry.yarnpkg.com/expo-doctor/-/expo-doctor-1.19.8.tgz#e2132a728755cd42a98ad08e3feeb0503edb12e7"
   integrity sha512-ZHpQM+BfJe1DNaA+/ObtLYazC2x78tIV3kkfoSGR46Tj1EvzOFh1p9gFHsILI9TOyXPEcgxCkFw9AVvf8C4c1g==
 
-expo-file-system@~57.0.6:
+expo-document-picker@~57.0.3:
+  version "57.0.3"
+  resolved "https://registry.yarnpkg.com/expo-document-picker/-/expo-document-picker-57.0.3.tgz#af0e0ccf59481e437407f0a82e8fe3497edd1570"
+  integrity sha512-XlxdZ0zzv44JRD8O15DISgIO8FTaZ581oc4kQp6MJoR7vdahjcY+2qCuDt5k1J8/lc0YR+bXon/v81norciuxw==
+
+expo-file-system@~57.0.6, expo-file-system@~57.0.7:
   version "57.0.7"
   resolved "https://registry.yarnpkg.com/expo-file-system/-/expo-file-system-57.0.7.tgz#03c4587c0027f65f7e04d88796aefcfe74b03cae"
   integrity sha512-1vkZRadOsIputFDBcclqBa1pO3iXOO6iIsdqJipQWw4V5TSnWgmRTuOF7ro8IzrVue+PHbum++KCG3Tawem4cg==
@@ -3451,6 +3461,15 @@ expo-server@^57.0.3:
   version "57.0.3"
   resolved "https://registry.yarnpkg.com/expo-server/-/expo-server-57.0.3.tgz#02e038a85453f1f4eb00024256b4b3cab949cace"
   integrity sha512-aK+LdKzauHSGmsOStZtyxdzv0zWssCkxTw3m4QuOhfDSJsZaMRTd9O41d8ixU/QfELTbaJ0oRNcF7JFV/7O9YQ==
+
+expo-sharing@~57.0.19:
+  version "57.0.24"
+  resolved "https://registry.yarnpkg.com/expo-sharing/-/expo-sharing-57.0.24.tgz#8997868627fd3467e00f3486546c1edd6c60b9e2"
+  integrity sha512-q3+9V8Xa41S4KWe0bq2e2FuByeVBHu04G3lk5TqS030fWe3QdNHeSEbUn51RqxfcxMPa53NWVkVYP967xqtL3w==
+  dependencies:
+    "@expo/config-plugins" "^57.0.11"
+    "@expo/config-types" "^57.0.2"
+    "@expo/plist" "^0.8.1"
 
 expo-splash-screen@57.0.8:
   version "57.0.8"
