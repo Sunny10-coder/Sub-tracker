@@ -29,9 +29,10 @@ export default function LinkDetail() {
   const invalidate = useInvalidateAll();
   const [newTags, setNewTags] = useState("");
   const allLinks=useLinks();
-  const analysis=useMutation({mutationFn:()=>api.analyzeLink(id!),onSuccess:refresh});
+
 
   const refresh = () => { refetch(); invalidate(); };
+  const analysis=useMutation({mutationFn:()=>api.analyzeLink(id!),onSuccess:refresh});
   const del = useMutation({ mutationFn: () => api.deleteLink(id!), onSuccess: () => { invalidate(); router.back(); } });
   const patch = useMutation({ mutationFn: (b: Record<string, unknown>) => api.updateLink(id!, b), onSuccess: refresh });
   const remind = useMutation({
