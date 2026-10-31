@@ -671,7 +671,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       if(x.status==="Unknown")fields.push("status");
       return {...x,missing:fields};
     }).filter(x=>x.missing.length).slice(0,100);
-    const promos=v.promo_codes.map((p:Dict)=>({...p,ref_id:p.id,
+    const promos=v.promo_codes.map((p:Dict)=>({...p,code:string(p.code),ref_id:p.id,
       description:string(p.description||p.discount_text),expires:p.expiry_date||null,
       days_left:futureDays(p.expiry_date)})).filter(p=>p.code).slice(0,100);
     const dont_forget=v.links.map(l=>{
