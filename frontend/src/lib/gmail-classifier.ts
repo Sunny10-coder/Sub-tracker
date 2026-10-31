@@ -51,7 +51,7 @@ export function senderInfo(from:string):{provider:string;domain:string;address:s
  }
  return {provider,domain,address};
 }
-const SUB_STRONG=/\b(?:subscription (?:confirmation|confirmed|renewal|renewed|activated|started|is active|will renew|expires|expiring|cancelled)|your subscription (?:is|has|will)|renewal (?:notice|reminder|confirmation|successful|upcoming)|upcoming renewal|automatic renewal|auto[- ]renewal|(?:monthly|yearly|annual) (?:subscription|membership|plan)|(?:your )?(?:free )?trial (?:has )?(?:started|activated|ends|expires|ending|will end)|your (?:membership|plan) (?:is active|has renewed|was activated)|next billing date)\b/i;
+const SUB_STRONG=/\b(?:subscription (?:confirmation|confirmed|renewal|renewed|activated|started|is active|will renew|expires|expiring|cancelled)|your subscription (?:is|has|will)|renewal (?:notice|reminder|confirmation|successful|upcoming)|upcoming renewal|automatic renewal|auto[- ]renewal|(?:monthly|yearly|annual) (?:subscription|membership|plan)|(?:your )?(?:free )?trial (?:has )?(?:started|activated|ends|expires|ending|will end)|(?:your )?(?:membership|plan) (?:is active|has renewed|was activated|activated|renewed|expired|cancelled)|next billing date)\b/i;
 const RECEIPT=/\b(?:invoice|receipt|payment received|payment confirmed|your payment|payment successful|billing statement|charge successful|charged for your subscription|payment completed)\b/i;
 const RECURRING=/\b(?:subscription (?:plan|renewal|payment|billing|activated|renewed)|renewal|recurring|auto[- ]?renew|(?:monthly|annual|yearly|weekly|daily) (?:plan|membership|subscription|billing|charge)|next billing date|next payment date|plan (?:name|renews))\b/i;
 const ACCOUNT=/\b(?:welcome to|(?:your |new )?account (?:has been )?(?:created|activated|registered)|registration (?:completed|confirmed|successful)|(?:confirm|verify|activate) (?:your )?(?:account|email address|email|registration)|thanks for (?:joining|registering|signing up)|sign[- ]?up (?:confirmed|complete))\b/i;
@@ -74,7 +74,7 @@ function dateNear(source:string,marker:RegExp):string|null{
 }
 function moneyNear(s:string):{price:number|null;currency:string|null}{
  // A standalone number from a shopping email must never become a recurring fee.
- const m=s.match(/(?:total (?:paid|charged|due)|amount (?:paid|due|charged)|(?:monthly|annual|yearly|renewal|subscription|plan) (?:charge|price|cost|fee)|you (?:paid|were charged)|billed)\s*(?::|is|of)?\s*(USD|AED|EUR|GBP|INR|US\$|A\$|\$|€|£|₹)\s*([\d,]+(?:\.\d{1,2})?)/i);
+ const m=s.match(/(?:total (?:paid|charged|due)|amount (?:paid|due|charged)|(?:monthly|annual|yearly|renewal|subscription|plan) (?:billing|charge|price|cost|fee)|you (?:paid|were charged)|billed)\s*(?::|is|of)?\s*(USD|AED|EUR|GBP|INR|US\$|A\$|\$|€|£|₹)\s*([\d,]+(?:\.\d{1,2})?)/i);
  if(!m)return {price:null,currency:null};
  const n=Number(m[2].replace(/,/g,""));if(!Number.isFinite(n)||n<0||n>1000000)return {price:null,currency:null};
  const token=m[1].toUpperCase(),symbols:Record<string,string>={"$":"USD","US$":"USD","A$":"AUD","€":"EUR","£":"GBP","₹":"INR"};
