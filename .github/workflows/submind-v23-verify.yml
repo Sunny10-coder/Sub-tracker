@@ -1,12 +1,7 @@
 name: Verify SubMind 2.3 Unified Vault
-# One-off CI verification after TypeScript fixes; no every-push builds.
+# One-off CI verification after Android integration; check runs on PR workflow change only.
 
 on:
-  push:
-    branches:
-      - feature/submind-unified-vault-gmail-20261031
-    paths:
-      - '.github/workflows/submind-v23-verify.yml'
   pull_request:
     branches:
       - feature/submind-smart-vault-20261030
