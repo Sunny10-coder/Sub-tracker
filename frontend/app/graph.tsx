@@ -13,6 +13,7 @@ const TYPES: Record<string,{name:string;color:string}> = {
   account:{name:"Accounts",color:"#3ACB8F"},
   link:{name:"Saved Links",color:"#4796FC"},
   prompt:{name:"AI Prompts",color:"#D86AFA"},
+  idea:{name:"Ideas",color:"#FAC465"},
   promo:{name:"Promo Codes",color:"#ED579D"},
   plan:{name:"Watchlist",color:"#25B5C7"},
   category:{name:"Categories",color:"#F9C745"},
@@ -21,7 +22,7 @@ const TYPES: Record<string,{name:string;color:string}> = {
 const FILTERS=["All","Services","Knowledge","Ideas","Money"];
 const selectedTypes:Record<string,string[]> = {
   All:Object.keys(TYPES),Services:["provider","account","subscription","plan"],
-  Knowledge:["link","prompt","tag","category"],Ideas:["link","prompt","tag","category","provider"],
+  Knowledge:["link","prompt","idea","tag","category"],Ideas:["link","prompt","idea","tag","category","provider"],
   Money:["subscription","promo","plan","account","provider"],
 };
 export default function Graph() {
@@ -62,7 +63,7 @@ export default function Graph() {
     const n=selected;if(!n)return;
     const uri:Record<string,string>={
       account:"/account/"+n.ref_id,subscription:"/subscription/"+n.ref_id,
-      link:"/link/"+n.ref_id,prompt:"/(tabs)/prompts",
+      link:"/link/"+n.ref_id,prompt:"/(tabs)/prompts",idea:"/(tabs)/prompts",
       promo:"/promo-vault",plan:"/watchlist",provider:"/(tabs)/account-hub",
     };
     router.push((uri[n.type]||"/(tabs)/vault") as any);
