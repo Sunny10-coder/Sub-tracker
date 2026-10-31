@@ -64,7 +64,7 @@ function mutate<T>(fn:()=>Promise<T>):Promise<T>{
 export async function getVault():Promise<Vault>{
  const raw=await storage.getItem(LOCAL_VAULT_KEY,"");
  if(typeof raw!=="string"||!raw)return copy(EMPTY);
- try{return copy(JSON.parse(raw))}catch{return copy(EMPTY)}
+ try{const parsed=JSON.parse(raw);return parsed && typeof parsed==="object" ? copy(parsed):copy(EMPTY)}catch{return copy(EMPTY)}
 }
 async function save(v:Vault):Promise<void>{
  if(!await storage.setItem(LOCAL_VAULT_KEY,JSON.stringify(v)))throw Error("Could not save data in phone storage");
