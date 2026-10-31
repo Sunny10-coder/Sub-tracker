@@ -8,9 +8,9 @@ import { checkKey, models } from "@/src/lib/direct-providers";
 import { METRO } from "@/src/components/metro-tiles";
 
 const PROVIDERS=[
- {id:"gemini",name:"Google Gemini",subtitle:"AI extraction and summaries"},
+ {id:"gemini",name:"Google Gemini",subtitle:"Stable models only; excludes all 2.5 and preview"},
  {id:"groq",name:"Groq",subtitle:"Fast language models"},
- {id:"nvidia",name:"NVIDIA NIM",subtitle:"Additional hosted models"},
+ {id:"nvidia",name:"NVIDIA NIM",subtitle:"Free-tier prototyping · automatic Nemotron fallback"},
  {id:"brave",name:"Brave Search",subtitle:"Live plan and promo discovery"},
 ] as const;
 const keyOf=(id:string)=>"submind.api-keys."+id;
@@ -24,7 +24,7 @@ export default function ApiKeys(){
  const [modelList,setModelList]=useState<string[]>([]);
  useEffect(()=>{Promise.all(PROVIDERS.map(async p=>[p.id,Boolean(await storage.secureGet(keyOf(p.id),""))] as const))
   .then(entries=>setConfigured(Object.fromEntries(entries)))},[]);
- const test=async()=>{setBusy(true);setTestMessage("Testing provider...");try{const res=await checkKey(selected as any,value.trim()||undefined);setTestMessage(res);if(selected==="gemini"||selected==="groq"){if(!value.trim()){setModelList(await models(selected as "gemini"|"groq"));}}}catch(e:any){setTestMessage("Connection failed: "+e.message);}finally{setBusy(false)}};
+ const test=async()=>{setBusy(true);setTestMessage("Testing provider...");try{const res=await checkKey(selected as any,value.trim()||undefined);setTestMessage(res);if(!value.trim() && selected!=="brave"){setModelList(await models(selected as "gemini"|"groq"|"nvidia"));}}catch(e:any){setTestMessage("Connection failed: "+e.message);}finally{setBusy(false)}};
  const save=async()=>{
   if(!value.trim())return;
   setBusy(true);
@@ -65,6 +65,7 @@ export default function ApiKeys(){
     </View>
     <PrimaryButton title="Test connection" icon="wifi-check" variant="secondary" loading={busy} disabled={!value.trim()&&!configured[selected]} onPress={test}/>
     {testMessage?<Text style={{color:testMessage.startsWith("Connection failed")?METRO.red:METRO.cyan,fontSize:13}}>{testMessage}</Text>:null}
+    {modelList.length?<Text style={styles.muted}>Accessible models: {modelList.slice(0,8).join(" · ")}</Text>:null}
     <PrimaryButton title="Save to Android secure storage" icon="lock-check-outline" disabled={!value.trim()} loading={busy} onPress={save}/>
     {configured[selected]?<PrimaryButton title="Remove stored key" icon="key-remove" variant="secondary" onPress={remove}/>:null}
    </Card>
