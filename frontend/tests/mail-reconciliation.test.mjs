@@ -22,6 +22,10 @@ assert.equal(applyMailCandidate(v,candidate("mail2","subscription","Renewal conf
   renewal_date:"2026-12-30"}),mailbox,now,uid).decision,"updated");
 assert.equal(v.subscriptions.length,1);
 assert.equal(v.subscriptions[0].renewal_date,"2026-12-30");
+assert.equal(applyMailCandidate(v,candidate("mail2b","subscription","Your trial ends on 2026-11-02",
+ {provider:"ChatGPT",plan:"Pro",event_type:"trial_ending",trial_end:"2026-11-02"}),mailbox,now,uid).decision,"updated");
+assert.equal(v.subscriptions.length,1);
+assert.equal(v.subscriptions[0].trial_end,"2026-11-02");
 assert.equal(applyMailCandidate(v,candidate("mail3","subscription","Payment successful",
  {provider:"ChatGPT",plan:"Pro",price:30,currency:"USD",event_type:"payment",
   payment_confirmed:true}),mailbox,now,uid).decision,"review");
