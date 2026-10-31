@@ -66,8 +66,16 @@ export function classifyLink(url: string, note = "", source = "share"): VaultIte
   const path = decodeURIComponent(parsed.pathname).replace(/[-_/]+/g, " ").trim().slice(0, 80);
   const context = [domain, path, note].join(" ");
   const category = inferCategory(context);
+  const kind=domain==="github.com"&&parsed.pathname.split("/").filter(Boolean).length>=2?"github":
+    domain==="instagram.com"||domain==="www.instagram.com"?"instagram":
+    domain==="youtube.com"||domain==="youtu.be"?"youtube":
+    domain==="reddit.com"?"reddit":domain==="tiktok.com"?"tiktok":
+    domain==="x.com"||domain==="twitter.com"?"twitter":"article";
+  const collection=kind==="github"?"GitHub":kind==="instagram"?"Instagram":
+    kind==="youtube"?"YouTube":kind==="reddit"?"Reddit":kind==="tiktok"?"TikTok":
+    kind==="twitter"?"X / Twitter":"Websites";
   return {
-    url: url.trim(), canonical_url, provider, source, category,
+    url: url.trim(), canonical_url, provider, source, category, kind, collection,
     title: path.length > 3 ? path : provider,
     summary: note.trim().slice(0, 700),
     note: note.trim().slice(0, 1500),
