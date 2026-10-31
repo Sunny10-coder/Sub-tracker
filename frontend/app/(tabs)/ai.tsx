@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from "expo-audio";
 import { useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
@@ -32,9 +33,11 @@ type Msg = { role: "user" | "ai"; text: string; pending?: boolean };
 
 export default function AskAI() {
   const styles = useStyles();
+  const {ask}=useLocalSearchParams<{ask?:string}>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Msg[]>([]);
+  useEffect(()=>{if(typeof ask==="string"&&ask.trim())setInput(ask.trim());},[ask]);
   const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
