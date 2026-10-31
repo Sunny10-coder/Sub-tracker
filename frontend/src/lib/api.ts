@@ -32,6 +32,7 @@ export const api = {
   mailboxes: () => req<any[]>("/mailboxes"),
   reviewQueue: () => req<any[]>("/review-queue"),
   importMail: (mailbox: string, records: any[]) => req<any>("/mail/ingest", { method: "POST", body: JSON.stringify({ mailbox, records }) }),
+  autoSyncMail: (mailbox: string, records: any[]) => req<any>("/mail/auto-sync", { method: "POST", body: JSON.stringify({ mailbox, records }) }),
   cleanupLegacyMail: () => req<{removed:number;preserved:number}>("/mail/cleanup-legacy", { method: "POST", body: "{}" }),
   savePromoCode: (b: any) => req<any>("/deals/codes", { method: "POST", body: JSON.stringify(b) }),
   priceHistory: (provider = "") => req<any[]>(`/deals/price-history?provider=${encodeURIComponent(provider)}`),

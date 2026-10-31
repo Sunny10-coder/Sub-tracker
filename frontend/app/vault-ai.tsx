@@ -2,7 +2,9 @@
  * SubMind Metro: unified personal intelligence hub.
  * Five main workspaces remain one tap away in the bottom navigator.
  */
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useCallback } from "react";
+import { autoSyncGmailOnLaunch } from "@/src/lib/automatic-mail-sync";
 import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,6 +25,13 @@ export default function VaultAI() {
  const router=useRouter();const insets=useSafeAreaInsets();
  const links=useLinks();const promos=usePromoCodes();const accounts=useAccounts();const watches=useWatchlist();
  const prompts=usePrompts();const mailboxes=useMailboxes();const pending=useReviewQueue();const subs=useSubscriptions();const graph=useGraph();
+ useFocusEffect(useCallback(()=>{
+   let visible=true;
+   autoSyncGmailOnLaunch().then(result=>{
+     if(visible&&!result.skipped){accounts.refetch();subs.refetch();promos.refetch();mailboxes.refetch();}
+   });
+   return()=>{visible=false};
+ },[]));
  const live=useLiveMetroIndex(3,9000);
  const refreshing=[links,promos,accounts,watches,prompts,mailboxes,pending,subs,graph].some(q=>q.isFetching);
  const refresh=()=>[links,promos,accounts,watches,prompts,mailboxes,pending,subs,graph].forEach(q=>q.refetch());
