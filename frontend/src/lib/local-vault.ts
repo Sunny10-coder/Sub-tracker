@@ -400,29 +400,74 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
         !(string(x.source_key).includes(":")&&string(x.id).startsWith("mail-"))
         ||(Number(x.classifier_version)===CLASSIFIER_VERSION&&Number(x.confidence)>=MIN_CONFIDENCE));
       result={removed:before-v.review_queue.length,preserved: v.review_queue.length};
-   }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
-      const id=route.split("/")[2];
-      const entry=v.review_queue.find(x=>x.id===id);
+   }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/reanalyze")){
+      const id=route.split("/")[2],entry=v.review_queue.find(x=>x.id===id);
       if(!entry)notFound();
-      if(entry.status!=="needs_review")throw Error("This finding was already reviewed");
-      const action=string(data.action);
-      if(action!=="approve"&&action!=="dismiss")throw Error("Choose approve or dismiss");
-      if(action==="dismiss"){
-        entry.status="dismissed";entry.reviewed_at=nowIso();
-        v.mail_activity.unshift({id:"review-"+uid(),source_key:entry.source_key,
-          action:"approved_v3",decision:"dismissed",recorded_at:nowIso()});
-        result={ok:true,status:entry.status};
-      }else{
-        const updated={...entry,extraction:{...(entry.extraction||{}),...(data.edits||{})},
-          confidence:1,classifier_version:CLASSIFIER_VERSION};
-        // Approval resolves uncertainty but still reconciles against the
-        // provider/account/plan rather than creating a second app record.
-        const outcome=applyMailCandidate(v,updated as MailCandidate,
-          string(entry.mailbox_email),nowIso(),uid,true);
-        if(outcome.decision==="ignored")throw Error("Review could not be saved. Check provider and mailbox.");
-        entry.status="approved";entry.reviewed_at=nowIso();
-        result={ok:true,status:entry.status,record_id:outcome.record_id};
-      }
+      if(!string(entry.raw_text))throw Error("The original text is unavailable for reanalysis.");
+      const candidate=classifyMail({id:"manual-recheck",subject:string(entry.source_subject||""),
+        from:string(entry.source_from||""),date:string(entry.created_at)||nowIso(),
+        snippet:string(entry.raw_text).slice(0,250),body:string(entry.raw_text),labels:[]},
+        string(entry.source_to||entry.extraction?.account_email))[0];
+      if(!candidate)throw Error("No high-confidence subscription, account or promotion signal. Keep this in review.");
+      entry.extraction={...entry.extraction,...candidate.extraction};
+      entry.confidence=candidate.confidence;
+      entry.doubts=["Rechecked against the saved text; review before adding."];
+      result=entry;
+   }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
+      const id=route.split("/")[2],entry=v.review_queue.find(x=>x.id===id);
+      if(!entry)notFound();
+      if(!["needs_review","pending"].includes(string(entry.status)))throw Error("This finding has already been handled.");
+      const action=string(data.action),ex={...(entry.extraction||{}),...(data.edits||{})};
+      const provider=string(ex.provider),email=string(ex.account_email||entry.mailbox_email||entry.source_to).toLowerCase();
+      let recordId:string|undefined;
+      if(action==="ignore"||action==="dismiss"){
+        entry.status="ignored";
+      }else if(action==="account"){
+        if(!provider)throw Error("Enter a provider before saving the account.");
+        const prior=v.accounts.find(x=>normalized(x.provider)===normalized(provider)&&lower(x.email)===email);
+        if(prior){recordId=prior.id;entry.status="merged";}
+        else{const record=normalizeAccount({id:"acct-"+uid(),provider,email,source:"manual-review",
+          created_at:nowIso(),status:"Needs confirmation",notes:string(ex.summary)});
+          v.accounts.unshift(record);recordId=record.id;entry.status="added";}
+      }else if(action==="plan"){
+        if(!provider)throw Error("Enter a provider before adding the plan.");
+        const plan=string(ex.plan);
+        const prior=v.watchlist.find(x=>normalized(x.provider)===normalized(provider)&&
+          normalized(x.plan)===normalized(plan)&&lower(x.account_email)===email);
+        if(prior){recordId=prior.id;entry.status="merged";}
+        else{const record=normalizeWatch({id:"watch-"+uid(),provider,plan,
+          account_email:email,price:ex.price===""?null:ex.price??null,
+          currency:string(ex.currency)||"AED",billing_cycle:string(ex.billing_cycle)||"unknown",
+          expiry_date:string(ex.offer_expiry)||null,source:"manual-review",
+          created_at:nowIso(),status:"Watching",reviewed:true});
+          v.watchlist.unshift(record);recordId=record.id;entry.status="added";}
+      }else if(action==="link"){
+        const match=string(ex.url||entry.raw_text).match(/https?:\/\/[^\s<>"']+/i);
+        if(!match)throw Error("No URL in this finding. Add a URL before saving as a link.");
+        const classified=classifyLink(match[0],"","email");
+        const old=v.links.find(x=>x.canonical_url===classified.canonical_url);
+        if(old){recordId=old.id;entry.status="merged";}
+        else{const record={...classified,id:"link-"+uid(),source:"review",created_at:nowIso()};
+          v.links.unshift(record);recordId=record.id;entry.status="added";}
+      }else if(action==="merge"){
+        const dest=string(data.merge_into);
+        if(!dest)throw Error("Select an existing matching record before merging.");
+        const prior=[...v.subscriptions,...v.accounts,...v.watchlist,...v.links].find(x=>x.id===dest);
+        if(!prior)throw Error("Merge target was not found.");
+        if(provider&&prior.provider&&normalized(provider)!==normalized(prior.provider))
+          throw Error("Provider mismatch. Do not merge different services.");
+        recordId=dest;entry.status="merged";
+      }else if(action==="approve"){
+        if(!entry.message_id||!entry.mailbox_email)throw Error("Manual findings require Add as account, Add as plan or Ignore.");
+        const approved={...entry,extraction:ex,confidence:1,classifier_version:CLASSIFIER_VERSION};
+        const outcome=applyMailCandidate(v,approved as MailCandidate,string(entry.mailbox_email),nowIso(),uid,true);
+        if(outcome.decision==="ignored")throw Error("Could not reconcile this Gmail finding.");
+        recordId=outcome.record_id;entry.status="added";
+      }else throw Error("Unsupported review action.");
+      entry.extraction=ex;entry.reviewed_at=nowIso();
+      v.mail_activity.unshift({id:"activity-"+uid(),source_key:string(entry.source_key||id),
+        action,record_id:recordId||null,recorded_at:nowIso()});
+      result={ok:true,status:entry.status,record_id:recordId||null};
    }else if(route==="/promo/sources"&&method==="POST"){
       const provider=string(data.provider).slice(0,100);
       const keywords=string(data.keywords).slice(0,150);
