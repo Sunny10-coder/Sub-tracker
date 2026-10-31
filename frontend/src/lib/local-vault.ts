@@ -228,6 +228,110 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       Object.assign(rec,data,{updated_at:nowIso()});result=rec;
    }else if(route.startsWith("/prompts/")&&method==="DELETE"){
       v.prompts=v.prompts.filter(x=>x.id!==route.split("/")[2]);result={ok:true};
+   }else if(route==="/mail/auto-sync"&&method==="POST"){
+      const mailbox=string(data.mailbox).toLowerCase();
+      const rows=asArray(data.records);
+      if(!mailbox.includes("@")||rows.length>300)throw Error("Invalid mailbox or oversized scan");
+      let accountsAdded=0,subscriptionsAdded=0,promosAdded=0,updated=0,ignored=0;
+      const previouslySeen=new Set(v.mail_activity.filter(x=>x.action==="auto_sync").map(x=>string(x.source_key)));
+      const supportedDate=(x:any)=>typeof x==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(x)?x:null;
+      for(const incoming of rows){
+        const source_key=mailbox+":"+string(incoming.message_id)+":"+string(incoming.type);
+        const info=incoming.extraction||{};
+        const provider=string(info.provider);
+        if(!string(incoming.message_id)||!["subscription","account","promo"].includes(incoming.type)
+          ||Number(incoming.classifier_version)!==CLASSIFIER_VERSION
+          ||Number(incoming.confidence)<MIN_CONFIDENCE
+          ||!Array.isArray(incoming.evidence)||!incoming.evidence.length
+          ||!provider||normalized(provider)==="unknown"){ignored++;continue;}
+        if(previouslySeen.has(source_key)){ignored++;continue;}
+        const email=mailbox;
+        let saved=false;
+        if(incoming.type==="account"){
+          const existing=v.accounts.find(a=>normalized(a.provider)===normalized(provider)&&string(a.email)===email);
+          if(!existing){
+            v.accounts.unshift(normalizeAccount({
+              id:"acct-"+uid(),provider,email,status:"Created",source:"gmail",source_key,
+              discovered_at:nowIso(),confidence:Number(incoming.confidence)
+            }));
+            accountsAdded++;saved=true;
+          }else saved=true;
+        }else if(incoming.type==="subscription"){
+          // Never silently declare "Active" solely because an email mentions a receipt.
+          const name=string(info.plan),prior=v.subscriptions.find(x=>
+            normalized(x.provider)===normalized(provider)&&string(x.account_email)===email&&
+            (normalized(x.plan)===normalized(name)||!string(x.plan)||!name));
+          const trialEnd=supportedDate(info.trial_end),renewal=supportedDate(info.renewal_date);
+          if(prior){
+            if(!prior.plan&&name)prior.plan=name;
+            if(renewal&&(!prior.renewal_date||String(renewal)>String(prior.renewal_date)))prior.renewal_date=renewal;
+            if(trialEnd&&(!prior.trial_end||String(trialEnd)>String(prior.trial_end)))prior.trial_end=trialEnd;
+            if(prior.price==null&&info.price!=null&&Number.isFinite(Number(info.price)))prior.price=Number(info.price);
+            if((!prior.currency||prior.currency==="AED")&&string(info.currency))prior.currency=string(info.currency);
+            if((!prior.billing_cycle||prior.billing_cycle==="unknown")&&string(info.billing_cycle))prior.billing_cycle=string(info.billing_cycle);
+            prior.last_detected_at=nowIso();
+            updated++;saved=true;
+          }else{
+            const sub=normalizeSub({
+              ...info,id:"sub-"+uid(),provider,account_email:email,source:"gmail",
+              source_key,created_at:nowIso(),
+              status:trialEnd?"Trial":"Unknown",
+              confidence:Number(incoming.confidence),
+              renewal_date:renewal,trial_end:trialEnd,
+              review_required:false,auto_detected:true,
+              currency:string(info.currency)||"AED"
+            });
+            v.subscriptions.unshift(sub);subscriptionsAdded++;saved=true;
+          }
+          if(!v.accounts.some(a=>normalized(a.provider)===normalized(provider)&&string(a.email)===email)){
+            v.accounts.unshift(normalizeAccount({id:"acct-"+uid(),provider,email,status:"Created",
+              source:"gmail",created_at:nowIso()}));
+            accountsAdded++;
+          }
+        }else if(incoming.type==="promo"){
+          const code=string(info.code).toUpperCase();
+          const expiry=supportedDate(info.expiry_date);
+          if(code){
+            const existing=v.promo_codes.find(x=>normalized(x.provider)===normalized(provider)&&
+              normalized(x.code)===normalized(code)&&string(x.account_email)===email);
+            if(existing){
+              if(expiry)existing.expiry_date=expiry;
+              existing.last_seen_at=nowIso();updated++;
+            }else{
+              v.promo_codes.unshift(normalizePromo({
+                id:"promo-"+uid(),provider,code,discount_text:string(info.discount_text).slice(0,230),
+                expiry_date:expiry,account_email:email,source:"gmail",source_key,
+                verified:false,created_at:nowIso(),auto_detected:true
+              }));
+              promosAdded++;
+            }
+            saved=true;
+          }else{
+            // Offers without a redemption code belong to findings, not fake promo codes.
+            const title=string(info.discount_text)||"Offer from "+provider;
+            const existing=v.promo_findings.find(x=>normalized(x.provider)===normalized(provider)&&
+              string(x.account_email)===email&&normalized(x.title)===normalized(title));
+            if(!existing){
+              v.promo_findings.unshift({id:"finding-"+uid(),provider,title,
+                description:"Detected from a Gmail promotional message",account_email:email,
+                source:"gmail",source_key,expiry_date:expiry,verified:false,
+                status:"unverified",created_at:nowIso(),auto_detected:true});
+              promosAdded++;
+            }else updated++;
+            saved=true;
+          }
+        }
+        if(saved){
+          previouslySeen.add(source_key);
+          v.mail_activity.unshift({id:"sync-"+uid(),source_key,action:"auto_sync",
+            provider,type:incoming.type,mailbox_email:email,recorded_at:nowIso()});
+        }else ignored++;
+      }
+      const mailboxRecord=v.mailboxes.find(x=>x.email===mailbox);
+      if(mailboxRecord){mailboxRecord.last_synced_at=nowIso();mailboxRecord.last_scan_count=rows.length;}
+      else v.mailboxes.push({id:"mailbox-"+normalized(mailbox),email:mailbox,
+        last_synced_at:nowIso(),last_scan_count:rows.length});
+      result={accountsAdded,subscriptionsAdded,promosAdded,updated,ignored,mailbox};
    }else if(route==="/mail/ingest"&&method==="POST"){
       const mailbox=string(data.mailbox).toLowerCase();const rows=asArray(data.records);
       if(!mailbox||rows.length>250)throw Error("Invalid mailbox or too many records");
