@@ -15,6 +15,7 @@ export default function GmailSync() {
   const [progress, setProgress] = useState(0);
   const [notice, setNotice] = useState("Sign in to Gmail to scan only the messages relevant to your accounts, billing and offers.");
   const [days, setDays] = useState(180);
+  const [kinds,setKinds]=useState<MailType[]>(["subscription","account","promo"]);
   const {data:mailboxes=[]} = useMailboxes();
   const {data:queue=[]} = useReviewQueue();
   const invalidate = useInvalidateAll();
