@@ -8,6 +8,7 @@ import { getVault, localRequest, localInsights } from "@/src/lib/local-vault";
 import * as direct from "@/src/lib/direct-providers";
 import { recommendToolsForGoal, isGoalQuery } from "@/src/lib/tool-goal-matcher";
 import { analyzePublicLink, suggestRelatedLinks, SMART_LINK_MAX_BULK } from "@/src/lib/smart-link-intelligence";
+import { buildGoalPlan,creditOptimizer,matchSubscriptionBenefits,knowledgeConnections,fetchGitHubSnapshot,repoUpdates,buildFollowUpSuggestions } from "@/src/lib/smart-companion";
 
 const SERVER_KEY = "server_url";
 const BUILD_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
@@ -135,6 +136,33 @@ async function req<T>(path:string,opts?:RequestInit):Promise<T>{
 
 export const api = {
   insights: () => req<any>("/insights"),
+  smartOverview: async()=>{const v=await getVault();return{
+    credits:creditOptimizer(v),suggestions:buildFollowUpSuggestions(v),
+    tasks:v.smart_tasks||[],watching:v.links.filter((l:any)=>l.repo_watch_enabled===true),
+    matching_links:v.links.length};},
+  smartGoalPlan: async(goal:string)=>buildGoalPlan(await getVault(),goal),
+  smartBenefitMatch: async(input:any)=>matchSubscriptionBenefits(await getVault(),input),
+  smartConnections: async(item:any)=>knowledgeConnections(await getVault(),item),
+  smartTasks: ()=>localRequest<any[]>("/smart/tasks"),
+  smartAddTask: (task:any)=>localRequest<any>("/smart/tasks",{method:"POST",body:JSON.stringify(task)}),
+  smartTaskStatus: (id:string,status:"open"|"done"|"dismissed")=>
+    localRequest<any>("/smart/tasks/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({status})}),
+  smartWatchRepo: (id:string,enabled:boolean)=>localRequest<any>("/smart/links/"+encodeURIComponent(id)+"/watch",
+    {method:"POST",body:JSON.stringify({enabled})}),
+  smartCheckRepositories: async(onProgress?:(current:number,total:number)=>void)=>{
+    const v=await getVault(),watching=v.links.filter((l:any)=>l.repo_watch_enabled).slice(0,20);
+    const outcome={checked:0,alerts:0,errors:0,total:watching.length};
+    for(const link of watching){
+      try{const fresh=await fetchGitHubSnapshot(String(link.url));
+        const alerts=repoUpdates(link,fresh);
+        for(const notice of alerts)await api.smartAddTask(notice);
+        await api.updateLink(String(link.id),{repo_watch_snapshot:fresh,last_repo_check:fresh.checked_at});
+        outcome.checked++;outcome.alerts+=alerts.length;
+      }catch{outcome.errors++;}
+      onProgress?.(outcome.checked+outcome.errors,outcome.total);
+    }
+    return outcome;
+  },
   accounts: async () => {
     const accounts=await localRequest<any[]>("/accounts");
     const subs=await api.allSubscriptionHistory().catch(()=>[]);
@@ -365,6 +393,7 @@ export const api = {
 
 // ------- hooks -------
 export const useArchivedSubscriptions = () => useQuery({queryKey:["archived-subscriptions"],queryFn:api.archivedSubscriptions});
+export const useSmartOverview = () => useQuery({queryKey:["smart-overview"],queryFn:api.smartOverview});
 export const useAccounts = () => useQuery({queryKey:["local-accounts"],queryFn:api.accounts});
 export const useVaultDashboard = () => useQuery({queryKey:["local-vault-dashboard"],queryFn:api.vaultDashboard});
 export const usePrompts = () => useQuery({queryKey:["local-prompts"],queryFn:api.prompts});
@@ -396,7 +425,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["insights", "subscriptions", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
+    ["insights", "subscriptions", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "smart-overview", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }
