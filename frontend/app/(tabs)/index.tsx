@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TAB_BAR_SPACE } from "./_layout";
-import { useInbox, useInsights, useLinks, useMemory, useReminders, useWatchlist } from "@/src/lib/api";
+import { useInbox, useInsights, useLinks, useMemory, useReminders, useWatchlist, useSubscriptions, useAccounts } from "@/src/lib/api";
 import { cancelByLabel, formatDate, money } from "@/src/lib/format";
 import { Icon, Loading, SectionLabel } from "@/src/components/ui";
 import { Tile, TileBig, TileLine, TileMid, useTileSize } from "@/src/components/tiles";
@@ -45,10 +45,12 @@ export default function Start() {
   const review = useInbox("needs_review");
   const links = useLinks();
   const watch = useWatchlist();
+  const currentPlans=useSubscriptions();
+  const serviceAccounts=useAccounts();
   const rems = useReminders();
 
   const go = (href: string) => () => router.push(href as never);
-  const refetchAll = () => { ins.refetch(); mem.refetch(); review.refetch(); links.refetch(); watch.refetch(); rems.refetch(); };
+  const refetchAll = () => { ins.refetch(); mem.refetch(); review.refetch(); links.refetch(); watch.refetch(); currentPlans.refetch(); serviceAccounts.refetch(); rems.refetch(); };
   const refreshing = ins.isFetching || mem.isFetching;
 
   const cur = ins.data?.currency || "AED";
@@ -129,6 +131,31 @@ export default function Start() {
               : [<View key="e"><TileLine strong>no reminders</TileLine><TileLine>tap to add one</TileLine></View>]}
           />
 
+          {/* Additional functional tiles; the original Lumia grid stays intact. */}
+          <View style={[styles.row, { gap }]}>
+            <Tile title="subscriptions" icon="wallet-outline" color={colors.accentBlue}
+              onPress={go("/(tabs)/subscriptions")} testID="tile-subscriptions" delay={550}
+              faces={[<View key="n"><TileBig>{currentPlans.data?.length ?? 0}</TileBig><TileLine>current plans</TileLine></View>]} />
+            <Tile title="accounts" icon="account-multiple-outline" color={colors.accentGreen}
+              onPress={go("/accounts")} testID="tile-accounts" delay={950}
+              faces={[<View key="n"><TileBig>{serviceAccounts.data?.length ?? 0}</TileBig><TileLine>registered services</TileLine></View>]} />
+          </View>
+          <View style={[styles.row, { gap }]}>
+            <Tile title="ask ai" icon="robot-happy-outline" color={colors.accentPink}
+              onPress={go("/(tabs)/ai")} testID="tile-ai" delay={450}
+              faces={[<View key="n"><TileLine strong>your personal AI</TileLine><TileLine>ask about plans, links and tools</TileLine></View>]} />
+            <Tile title="gmail sync" icon="gmail" color={colors.accentPurple}
+              onPress={go("/gmail-sync")} testID="tile-gmail" delay={1200}
+              faces={[<View key="n"><TileBig>{reviewItems.length}</TileBig><TileLine>messages to review</TileLine></View>]} />
+          </View>
+          <View style={[styles.row, { gap }]}>
+            <Tile title="brain map" icon="graph-outline" color={colors.accentYellow}
+              onPress={go("/tool-brain")} testID="tile-brain-tools" delay={1150}
+              faces={[<View key="n"><TileLine strong>your connected tools</TileLine><TileLine>find tools for your goal</TileLine></View>]} />
+            <Tile title="more tools" icon="apps" color={colors.accentOrange}
+              onPress={go("/restored-tools")} testID="tile-more" delay={1500}
+              faces={[<View key="n"><TileLine strong>prompts, promos and backups</TileLine><TileLine>all SubMind functions</TileLine></View>]} />
+          </View>
           {/* Quarter-size shortcuts */}
           <View style={[styles.smallWrap, { gap }]}>
             {SMALL_TILES.map((t) => (
