@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { setColorScheme, useTheme as useAppTheme } from "@/src/theme";
 import { ScrollView, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -18,6 +19,12 @@ export default function Settings() {
   const router = useRouter();
   const { data, isLoading, refetch } = useSettings();
   const [server, setServer] = useState(getServerUrl());
+  const {scheme:currentScheme}=useAppTheme();
+  const [selectedScheme,setSelectedScheme]=useState(currentScheme);
+  const changeScheme=async(next:"light"|"dark")=>{
+    setSelectedScheme(next);setColorScheme(next);
+    await storage.setItem("submind.color.scheme",next);
+  };
   const [serverState, setServerState] = useState<"idle" | "checking" | "ok" | "fail">("idle");
 
   // Point the app at a backend and check it answers before keeping it.
@@ -59,6 +66,16 @@ export default function Settings() {
       <AppHeader title="Settings" back />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 30, gap: 16 }} showsVerticalScrollIndicator={false}>
         {serverCard}
+        <Section title="Appearance">
+          <View style={styles.rowCol}>
+            <Text style={styles.label}>Lumia theme</Text>
+            <Text style={styles.sub}>Choose a black or white canvas. All colorful live tiles remain unchanged.</Text>
+            <View style={{flexDirection:"row",gap:8,marginTop:12}}>
+              <Chip label="Black" active={selectedScheme==="dark"} onPress={()=>changeScheme("dark")} />
+              <Chip label="White" active={selectedScheme==="light"} onPress={()=>changeScheme("light")} />
+            </View>
+          </View>
+        </Section>
         <Section title="Connections & private data">
           <View style={{gap:9,paddingVertical:9}}>
             <PrimaryButton title="Connect and sync Gmail" icon="gmail" variant="secondary" onPress={()=>router.push("/gmail-sync")}/>

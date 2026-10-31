@@ -13,7 +13,8 @@ import { initServerUrl } from "@/src/lib/api";
 import { autoSyncGmailOnLaunch } from "@/src/lib/automatic-mail-sync";
 import { Platform } from "react-native";
 import { queryClient } from "@/src/query-client";
-import { useTheme } from "@/src/theme";
+import { setColorScheme, useTheme } from "@/src/theme";
+import { storage } from "@/src/utils/storage";
 
 LogBox.ignoreAllLogs(true);
 
@@ -35,6 +36,8 @@ export default function RootLayout() {
     const load = async () => {
       try {
         await initServerUrl();
+        const saved=String(await storage.getItem("submind.color.scheme",""));
+        setColorScheme(saved==="light"?"light":"dark");
       } finally {
         setServerReady(true);
       }

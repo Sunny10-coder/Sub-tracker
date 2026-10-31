@@ -10,7 +10,7 @@ const MAP_KEY = "notif_map_v1";
 const CHANNEL = "reminders";
 const NOTIFY_HOUR = 9;
 
-type Reminder = { id: string; title: string; due_date?: string | null; completed?: boolean };
+type Reminder = { id: string; title: string; due_date?: string | null; completed?: boolean; kind?:string; ref_id?:string };
 type NotifMap = Record<string, { key: string; nid: string }>;
 
 let handlerSet = false;

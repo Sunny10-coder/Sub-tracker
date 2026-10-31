@@ -1,7 +1,6 @@
 // Windows Phone style live tiles for the Start screen.
 // A Tile is a flat colored square (or wide rectangle). A tile given several `faces`
 // flips (rotateX) between them on a timer like a Lumia live tile. Reduce-motion is respected.
-import { LinearGradient } from "expo-linear-gradient";
 import React, { ReactNode, useEffect, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, GestureResponderEvent, Pressable, Text, View, useWindowDimensions } from "react-native";
 
@@ -135,21 +134,7 @@ export function Tile({ title, icon, color, wide, small, badge, onPress, faces, i
           transform: [{ perspective: 760 }, { translateY: enterLift }, { rotateY: enterY }, { rotateX: tiltX_ }, { rotateY: tiltY_ }, { scale: press }],
         }}
       >
-        {/* slab edge: a darker copy of the tile sitting just below it gives the tile thickness */}
-        <View style={[styles.slab, { backgroundColor: color }]}>
-          <View style={styles.slabShade} />
-        </View>
         <Animated.View style={[styles.tile, { backgroundColor: color, transform: [{ rotateX }] }]}>
-          <LinearGradient
-            pointerEvents="none"
-            colors={["rgba(255,255,255,0.20)", "rgba(255,255,255,0.03)", "rgba(0,0,0,0.28)"]}
-            locations={[0, 0.45, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.sheen}
-          />
-          <View pointerEvents="none" style={styles.edgeTop} />
-          <View pointerEvents="none" style={styles.edgeLeft} />
           {small ? (
             <View style={styles.smallBody}>
               {icon ? <Icon name={icon} size={26} color={colors.onAccent} /> : null}
@@ -193,12 +178,7 @@ export function TileLine({ children, strong }: { children: ReactNode; strong?: b
 }
 
 const useStyles = makeStyles((colors) => ({
-  tile: { position: "absolute", top: 0, left: 0, right: 5, bottom: 5, padding: 10, justifyContent: "space-between", backfaceVisibility: "hidden", overflow: "hidden" },
-  slab: { position: "absolute", top: 5, left: 5, right: 0, bottom: 0, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.5, shadowRadius: 8, shadowOffset: { width: 3, height: 6 }, elevation: 8 },
-  slabShade: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
-  sheen: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  edgeTop: { position: "absolute", top: 0, left: 0, right: 0, height: 2, backgroundColor: "rgba(255,255,255,0.55)" },
-  edgeLeft: { position: "absolute", top: 0, left: 0, bottom: 0, width: 2, backgroundColor: "rgba(255,255,255,0.3)" },
+  tile: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, padding: 10, justifyContent: "space-between", backfaceVisibility: "hidden", overflow: "hidden" },
   smallBody: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
   smallTitle: { color: colors.onAccent, fontSize: 10, fontWeight: "500" },
   faceArea: { flex: 1, justifyContent: "flex-start", gap: 2 },

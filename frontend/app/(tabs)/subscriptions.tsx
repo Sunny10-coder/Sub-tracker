@@ -9,7 +9,7 @@ import { AppHeader, Badge, Card, CategoryDot, ChipRow, EmptyState, Loading, Prim
 import { makeStyles, useTheme } from "@/src/theme";
 import { TAB_BAR_SPACE } from "./_layout";
 
-const FILTERS = ["All", "Active", "Trial", "Paused", "Cancelled", "Expired"];
+const FILTERS = ["All", "Active", "Trial", "Paused"];
 
 const statusTone: any = { Active: "success", Trial: "mint", Paused: "warning", Cancelled: "error", Expired: "muted", Unknown: "muted" };
 
@@ -25,7 +25,7 @@ export default function Subscriptions() {
     <View style={styles.container}>
       <AppHeader
         title="Subscriptions"
-        subtitle={data ? `${data.length} ${filter !== "All" ? filter.toLowerCase() : "tracked"}` : undefined}
+        subtitle={data ? `${data.length} ${filter !== "All" ? filter.toLowerCase() : "current"} plans · cancelled/expired plans are in Accounts` : undefined}
       />
       <ChipRow items={FILTERS} value={filter} onChange={setFilter} testIDPrefix="sub-filter" />
 

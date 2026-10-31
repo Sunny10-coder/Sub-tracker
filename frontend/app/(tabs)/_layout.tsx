@@ -4,7 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/src/components/ui";
-import { useInbox, useReminders } from "@/src/lib/api";
+import { useInbox, useReminders, useSubscriptions, useSettings, useArchivedSubscriptions } from "@/src/lib/api";
 import { syncReminderNotifications } from "@/src/lib/notify";
 import { makeStyles, useTheme } from "@/src/theme";
 
@@ -84,9 +84,32 @@ function TabBar({ state, navigation }: any) {
 export default function TabsLayout() {
   // Mirror server reminders to local notifications whenever they change.
   const reminders = useReminders();
+  const subs=useSubscriptions();
+  const archived=useArchivedSubscriptions();
+  const settings=useSettings();
   useEffect(() => {
-    if (reminders.data) void syncReminderNotifications(reminders.data);
-  }, [reminders.data]);
+    if(!reminders.data||!subs.data||!archived.data)return;
+    const lead=Math.max(1,Math.min(30,Number(settings.data?.cancel_notice_days)||3));
+    const auto=(subs.data||[]).filter((sub:any)=>["active","trial"].includes(String(sub.status||"").toLowerCase()))
+      .filter((sub:any)=>sub.auto_renew!==false)
+      .map((sub:any)=>{
+        const deadline=String(sub.status==="Trial"?sub.trial_end||sub.renewal_date:sub.renewal_date||"").slice(0,10);
+        if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(deadline))return null;
+        const d=new Date(deadline+"T12:00:00");
+        if(Number.isNaN(d.getTime()))return null;
+        d.setDate(d.getDate()-lead);
+        return {id:"sub-alert:"+String(sub.id),kind:"subscription",ref_id:String(sub.id),
+          title:(sub.status==="Trial"?"Trial ending: ":"Review renewal: ")+String(sub.provider||"Subscription")+
+          " · "+deadline, due_date:[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-"),completed:false};
+      }).filter(Boolean);
+    // The notification mirror cancels any previously scheduled item absent
+    // from the latest list, including subscriptions moved to Accounts archive.
+    const archivedIds=new Set((archived.data||[]).map((x:any)=>String(x.id)));
+    void syncReminderNotifications([
+      ...(reminders.data||[]).filter((r:any)=>!archivedIds.has(String(r.ref_id||""))),
+      ...auto
+    ] as any);
+  },[reminders.data,subs.data,archived.data,settings.data?.cancel_notice_days]);
 
   return (
     <Tabs tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false }}>

@@ -137,7 +137,7 @@ export const api = {
   insights: () => req<any>("/insights"),
   accounts: async () => {
     const accounts=await localRequest<any[]>("/accounts");
-    const subs=await api.subscriptions().catch(()=>[]);
+    const subs=await api.allSubscriptionHistory().catch(()=>[]);
     const key=(v:any)=>String(v||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
     return accounts.map(account=>{
       const accountEmail=String(account.email||"").trim().toLowerCase();
@@ -147,10 +147,12 @@ export const api = {
       return {...account,plans:linked.map((sub:any)=>({id:sub.id,plan:sub.plan,status:sub.status}))};
     });
   },
+  allSubscriptionHistory: () => req<any[]>("/subscriptions"),
+  archivedSubscriptions: async () => (await req<any[]>("/subscriptions")).filter(x=>["cancelled","expired"].includes(String(x.status||"").toLowerCase())),
   createAccount: (b:any) => localRequest<any>("/accounts",{method:"POST",body:JSON.stringify(b)}),
   account: async (id:string) => {
     const record=await localRequest<any>("/accounts/"+encodeURIComponent(id));
-    const plans=await api.subscriptions().catch(()=>[]);
+    const plans=await api.allSubscriptionHistory().catch(()=>[]);
     const same=(x:any)=>String(x.provider||"").toLowerCase().replace(/[^a-z0-9]/g,"");
     return {...record,plans:plans.filter((x:any)=>Boolean(String(record.email||"").trim())&&same(x)===same(record)&&
       String(x.account_email||"").toLowerCase()===String(record.email||"").toLowerCase())
@@ -184,13 +186,18 @@ export const api = {
   putLinkReminder: (id:string,b:any) => localRequest<any>("/links/"+id+"/reminder",{method:"PUT",body:JSON.stringify(b)}),
   importMail: (mailbox:string, records:any[]) => localRequest<any>("/mail/ingest",{method:"POST",body:JSON.stringify({mailbox,records})}),
   autoSyncMail: (mailbox:string, records:any[]) => localRequest<any>("/mail/auto-sync",{method:"POST",body:JSON.stringify({mailbox,records})}),
-  subscriptions: (status?: string, category?: string) => {
+  subscriptions: async (status?: string, category?: string) => {
     const p = new URLSearchParams();
     if (status) p.set("status", status);
     if (category) p.set("category", category);
-    return req<any[]>(`/subscriptions?${p.toString()}`);
+    const rows=await req<any[]>(`/subscriptions?${p.toString()}`);
+    return rows.filter(x=>status?String(x.status).toLowerCase()===status.toLowerCase():!["cancelled","expired"].includes(String(x.status||"").toLowerCase())).filter(x=>!category||x.category===category);
   },
-  subscription: (id: string) => req<any>(`/subscriptions/${id}`),
+  subscription: async(id:string) => {
+    try{return await req<any>(`/subscriptions/${id}`);}
+    catch(e){const archive=await api.allSubscriptionHistory();const found=archive.find(x=>String(x.id)===id);
+      if(found)return found;throw e;}
+  },
   createSubscription: async (b:any) => {
     const provider=String(b.provider||"").trim().toLowerCase();
     if(!provider)throw Error("Provider is required.");
@@ -202,7 +209,16 @@ export const api = {
     if(match)throw Error("This provider, plan and sign-in email are already saved. Open the existing subscription instead of creating a duplicate.");
     return req<any>("/subscriptions",{method:"POST",body:JSON.stringify(b)});
   },
-  updateSubscription: (id: string, b: any) => req<any>(`/subscriptions/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  updateSubscription: async (id:string,b:any) => {
+    const updated=await req<any>(`/subscriptions/${id}`,{method:"PATCH",body:JSON.stringify(b)});
+    if(["cancelled","expired"].includes(String(b.status||"").toLowerCase())){
+      // Existing records and payment history remain intact. Only visibility changes.
+      const { syncReminderNotifications }=await import("@/src/lib/notify");
+      const upcoming=await api.reminders().catch(()=>[]);
+      await syncReminderNotifications(upcoming.filter((r:any)=>String(r.ref_id)!==id));
+    }
+    return updated;
+  },
   deleteSubscription: (id: string) => req<any>(`/subscriptions/${id}`, { method: "DELETE" }),
   recordPayment: (id: string, b: any) => req<any>(`/subscriptions/${id}/payment`, { method: "POST", body: JSON.stringify(b) }),
 
@@ -327,6 +343,7 @@ export const api = {
 };
 
 // ------- hooks -------
+export const useArchivedSubscriptions = () => useQuery({queryKey:["archived-subscriptions"],queryFn:api.archivedSubscriptions});
 export const useAccounts = () => useQuery({queryKey:["local-accounts"],queryFn:api.accounts});
 export const useVaultDashboard = () => useQuery({queryKey:["local-vault-dashboard"],queryFn:api.vaultDashboard});
 export const usePrompts = () => useQuery({queryKey:["local-prompts"],queryFn:api.prompts});
@@ -358,7 +375,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["insights", "subscriptions", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "local-accounts", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
+    ["insights", "subscriptions", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }
