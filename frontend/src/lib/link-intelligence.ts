@@ -47,7 +47,7 @@ export async function publicGitHubMetadata(rawUrl:string):Promise<Record<string,
   if(url.hostname.toLowerCase()!=="github.com")return null;
   const path=url.pathname.split("/").filter(Boolean);
   if(path.length<2||!path[0]||!path[1])return null;
-  const owner=path[0],repo=path[1].replace(/\\.git$/i,"");
+  const owner=path[0],repo=path[1].replace(/\.git$/i,"");
   if(!/^[a-zA-Z0-9_.-]+$/.test(owner)||!/^[a-zA-Z0-9_.-]+$/.test(repo))return null;
   const endpoint="https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo);
   const res=await fetch(endpoint,{headers:{Accept:"application/vnd.github+json"}});
