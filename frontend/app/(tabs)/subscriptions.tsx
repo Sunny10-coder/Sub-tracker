@@ -18,7 +18,7 @@ function daysUntil(value:any):number|null {
 function nextDate(s:any):any{
  if(s.status==="Trial")return s.trial_end||s.renewal_date||s.access_end;
  if(s.auto_renew===false||["Cancelled","Expired"].includes(s.status))return s.access_end||null;
- return s.renewal_date||null;
+ return s.renewal_date||s.access_end||s.expiry_date||null;
 }
 export default function Subscriptions() {
  const router=useRouter(),insets=useSafeAreaInsets();
