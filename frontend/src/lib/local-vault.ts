@@ -82,14 +82,14 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
    watchlist:asArray(data.watchlist).map(normalizeWatch),
    promo_codes:asArray(data.promo_codes).map(normalizePromo),
    review_queue:asArray(data.review_queue).map((a,i)=>({...a,id:a.id||"review-"+normalized([a.source_row,a.provider,a.field,a.reason,i].join("|"))})),
-   benefits:asArray(data.benefits),
-   mail_activity:asArray(data.mail_activity),
+   benefits:asArray(data.benefits).map((b,i)=>({...b,id:b.id||"benefit-import-"+i+"-"+normalized(b.provider||b.name)})),
+   mail_activity:asArray(data.mail_activity).map((m,i)=>({...m,id:m.id||"activity-import-"+i+"-"+normalized(m.source_key)})),
    prompts:asArray(data.prompts).map((p,i)=>({...p,id:p.id||"prompt-import-"+i+"-"+normalized(p.title)})),
    links:asArray(data.links).map((l,i)=>({...l,id:l.id||"link-import-"+i+"-"+normalized(l.url)})),
    reminders:asArray(data.reminders).map((r,i)=>({...r,id:r.id||"rem-import-"+i})),
-   mailboxes:asArray(data.mailboxes),
-   promo_sources:asArray(data.promo_sources),
-   promo_findings:asArray(data.promo_findings)
+   mailboxes:asArray(data.mailboxes).map((m,i)=>({...m,id:m.id||"mailbox-"+normalized(m.email)||"mailbox-"+i})),
+   promo_sources:asArray(data.promo_sources).map((s,i)=>({...s,id:s.id||"source-import-"+i+"-"+normalized(s.provider)})),
+   promo_findings:asArray(data.promo_findings).map((f,i)=>({...f,id:f.id||"finding-import-"+i+"-"+normalized(f.source_url)}))
   };
   const added:Dict={},duplicates:Dict={};
   for(const k of Object.keys(inbound)){
@@ -98,6 +98,11 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
     added[k]=array.filter(x=>!existingKeys.has(String(x.id))).length;
     duplicates[k]=array.length-added[k];
     (vault as any)[k]=mergeById(existing,array);
+  }
+  if(data.settings&&typeof data.settings==="object"&&!Array.isArray(data.settings)){
+    for(const k of ["currency","ai_enabled","keep_screenshots","price_monitoring","auto_add_threshold"]){
+      if(Object.prototype.hasOwnProperty.call(data.settings,k))vault.settings[k]=data.settings[k];
+    }
   }
   vault.imported_at=new Date().toISOString();await save(vault);
   return {added,duplicates,review:vault.review_queue.length};
@@ -237,7 +242,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       }
       const old=v.mailboxes.find(x=>x.email===mailbox);
       if(old){old.last_synced_at=nowIso();old.last_scan_count=rows.length;}
-      else v.mailboxes.push({email:mailbox,last_synced_at:nowIso(),last_scan_count:rows.length});
+      else v.mailboxes.push({id:"mailbox-"+normalized(mailbox),email:mailbox,last_synced_at:nowIso(),last_scan_count:rows.length});
       result={added,duplicates:rows.length-added,mailbox,review_pending:v.review_queue.filter(x=>x.status==="needs_review").length};
    }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
       const id=route.split("/")[2];const entry=v.review_queue.find(x=>x.id===id);
