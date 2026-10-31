@@ -16,6 +16,7 @@ export default function Prompts() {
   const {data:prompts=[],refetch}=usePrompts();
   const {data:links=[]}=useLinks();
   const invalidate=useInvalidateAll();
+  const [kind,setKind]=useState<"prompt"|"idea">("prompt");
   const [query,setQuery]=useState("");
   const [category,setCategory]=useState("All");
   const [composer,setComposer]=useState(false);
@@ -52,13 +53,13 @@ export default function Prompts() {
     const text=[p.title,p.text,p.category,(p.tags||[]).join(" ")].join(" ").toLowerCase();
     return (!query||text.includes(query.toLowerCase())) && (category==="All"||String(p.category||"Other")===category);
   }),[prompts,query,category]);
-  const reset=()=>{setEditing("");setTitle("");setBody("");setRelated([]);setComposer(false)};
-  const startEdit=(p:any)=>{setEditing(p.id);setTitle(p.title);setBody(p.text);setRelated(p.related_ids||[]);setComposer(true)};
+  const reset=()=>{setEditing("");setTitle("");setBody("");setRelated([]);setKind("prompt");setComposer(false)};
+  const startEdit=(p:any)=>{setEditing(p.id);setTitle(p.title);setBody(p.text);setRelated(p.related_ids||[]);setKind(p.kind==="idea"?"idea":"prompt");setComposer(true)};
   const save=async()=>{
     if(!title.trim()||!body.trim())return;
     setSaving(true);
     try{
-      const payload={title:title.trim(),text:body.trim(),related_ids:related};
+      const payload={title:title.trim(),text:body.trim(),related_ids:related,kind};
       if(editing)await api.updatePrompt(editing,payload);
       else await api.createPrompt(payload);
       invalidate();refetch();reset();
@@ -92,7 +93,12 @@ export default function Prompts() {
         <View style={{flex:1}}/><Icon name={composer?"chevron-up":"chevron-down"} color={METRO.dim}/>
       </Pressable>
       {composer?<View style={{...border,padding:15,gap:11,borderColor:METRO.purple+"88"}}>
-        <Text style={{...text,fontSize:20,fontWeight:"900"}}>{editing?"EDIT PROMPT":"NEW PROMPT"}</Text>
+        <Text style={{...text,fontSize:20,fontWeight:"900"}}>{editing?"EDIT ITEM":kind==="idea"?"NEW IDEA":"NEW PROMPT"}</Text>
+        <View style={{flexDirection:"row",gap:8}}>
+         {(["prompt","idea"] as const).map(x=><Pressable key={x} onPress={()=>setKind(x)} style={{flex:1,backgroundColor:kind===x?METRO.purple:"#30303E",padding:12,borderRadius:8,alignItems:"center"}}>
+          <Text style={{color:METRO.white,fontWeight:"900",fontSize:12}}>{x.toUpperCase()}</Text>
+         </Pressable>)}
+        </View>
         <TextInput value={title} onChangeText={setTitle} placeholder="Prompt title" placeholderTextColor="#7C8090" style={{backgroundColor:"#282A35",padding:15,borderRadius:10,color:METRO.white,fontSize:15}}/>
         <TextInput value={body} onChangeText={setBody} multiline textAlignVertical="top" placeholder="Paste or write your reusable AI instructions…" placeholderTextColor="#7C8090"
           style={{backgroundColor:"#282A35",padding:15,borderRadius:10,color:METRO.white,minHeight:160,lineHeight:22,fontSize:14}}/>
@@ -120,7 +126,7 @@ export default function Prompts() {
       {rows.length===0?<View style={{...border,padding:25,alignItems:"center",gap:10}}>
         <Icon name="text-box-search-outline" size={40} color={METRO.purple}/>
         <Text style={{...text,fontWeight:"800"}}>No matching prompts</Text>
-        <Text style={{color:METRO.dim,textAlign:"center"}}>Save a prompt above. Its themes and tags will link into your Brain Map.</Text>
+        <Text style={{color:METRO.dim,textAlign:"center"}}>Save a prompt or a new idea above. Shared themes and related research links will connect automatically in Brain Map.</Text>
       </View>:rows.map((p:any)=>{
         const isExpanded=expanded===p.id;
         return <View key={p.id} style={{...border,overflow:"hidden"}}>
@@ -128,7 +134,10 @@ export default function Prompts() {
           <Pressable onPress={()=>setExpanded(isExpanded?"":p.id)} style={{padding:15,gap:10}}>
             <View style={{flexDirection:"row",gap:10,alignItems:"center"}}>
               <Icon name="auto-fix" size={24} color={METRO.purple}/>
-              <Text style={{...text,fontWeight:"900",fontSize:17,flex:1}}>{p.title}</Text>
+              <View style={{flex:1,gap:4}}>
+               <Text style={{color:p.kind==="idea"?METRO.orange:METRO.purple,fontSize:10,fontWeight:"900"}}>{p.kind==="idea"?"IDEA":"AI PROMPT"}</Text>
+               <Text style={{...text,fontWeight:"900",fontSize:17}}>{p.title}</Text>
+              </View>
               <Icon name={isExpanded?"chevron-up":"chevron-down"} color={METRO.dim}/>
             </View>
             <Text numberOfLines={isExpanded?undefined:3} style={{color:"#C1C5D1",fontSize:13,lineHeight:21}}>{p.text}</Text>
