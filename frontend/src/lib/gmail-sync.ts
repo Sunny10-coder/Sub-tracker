@@ -51,7 +51,7 @@ export async function getConnectedGmail():Promise<string|null>{
   if(!user&&GoogleSignin.hasPreviousSignIn()){
     try {
       const restored=await GoogleSignin.signInSilently();
-      if(isSuccessResponse(restored))user=restored.data;
+      if(restored.type==="success")user=restored.data;
     }catch{return null;}
   }
   const address=normal(user?.user?.email);
