@@ -8,10 +8,10 @@ import { classifyLink, canonicalUrl, graphFromVault, inferCategory, inferTags } 
 export const LOCAL_VAULT_KEY = "submind.private.import.v1";
 type Dict = Record<string, any>;
 type Vault = { schema: string; subscriptions: Dict[]; accounts: Dict[]; watchlist: Dict[];
-  promo_codes: Dict[]; mail_activity: Dict[]; review_queue: Dict[]; prompts: Dict[]; mailboxes: Dict[];
+  promo_codes: Dict[]; mail_activity: Dict[]; review_queue: Dict[]; prompts: Dict[]; mailboxes: Dict[]; promo_sources: Dict[]; promo_findings: Dict[];
   benefits: Dict[]; links: Dict[]; reminders: Dict[]; price_snapshots: Dict[]; settings: Dict; imported_at?: string };
 const EMPTY:Vault={schema:"submind-import-v1",subscriptions:[],accounts:[],watchlist:[],
- promo_codes:[],mail_activity:[],review_queue:[],prompts:[],mailboxes:[],benefits:[],links:[],reminders:[],price_snapshots:[],
+ promo_codes:[],mail_activity:[],review_queue:[],prompts:[],mailboxes:[],promo_sources:[],promo_findings:[],benefits:[],links:[],reminders:[],price_snapshots:[],
  settings:{currency:"AED",ai_enabled:true,price_monitoring:false,auto_add_threshold:0.95}};
 
 function normalized(s:any):string{return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
@@ -19,7 +19,7 @@ function string(s:any):string{return typeof s==="string"?s.trim():""}
 function asArray(x:any):Dict[]{return Array.isArray(x)?x.filter(v=>v&&typeof v==="object"):[]}
 function copy(v:Vault):Vault{
  const merged={...EMPTY,...v,settings:{...EMPTY.settings,...v.settings}};
- for(const k of ["subscriptions","accounts","watchlist","promo_codes","mail_activity","review_queue","prompts","mailboxes","benefits","links","reminders","price_snapshots"] as const) {
+ for(const k of ["subscriptions","accounts","watchlist","promo_codes","mail_activity","review_queue","prompts","mailboxes","promo_sources","promo_findings","benefits","links","reminders","price_snapshots"] as const) {
   (merged as any)[k]=asArray((v as any)[k]);
  }
  return merged;
@@ -86,7 +86,9 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
    prompts:asArray(data.prompts).map((p,i)=>({...p,id:p.id||"prompt-import-"+i+"-"+normalized(p.title)})),
    links:asArray(data.links).map((l,i)=>({...l,id:l.id||"link-import-"+i+"-"+normalized(l.url)})),
    reminders:asArray(data.reminders).map((r,i)=>({...r,id:r.id||"rem-import-"+i})),
-   mailboxes:asArray(data.mailboxes)
+   mailboxes:asArray(data.mailboxes),
+   promo_sources:asArray(data.promo_sources),
+   promo_findings:asArray(data.promo_findings)
   };
   const added:Dict={},duplicates:Dict={};
   for(const k of Object.keys(inbound)){
@@ -255,6 +257,29 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
         type:entry.type,mailbox_email:entry.mailbox_email,provider:entry.extraction?.provider,
         action,recorded_at:nowIso()});
       result={ok:true,status:entry.status};
+   }else if(route==="/promo/sources"&&method==="POST"){
+      const provider=string(data.provider).slice(0,100);
+      const keywords=string(data.keywords).slice(0,150);
+      if(!provider)throw Error("Enter the source or provider to monitor");
+      const existing=v.promo_sources.find(x=>normalized(x.provider)===normalized(provider)&&normalized(x.keywords)===normalized(keywords));
+      if(existing)result=existing;
+      else{const rec={id:"src-"+uid(),provider,keywords,source_url:string(data.source_url).slice(0,400),
+       enabled:true,created_at:nowIso(),last_checked_at:null};v.promo_sources.unshift(rec);result=rec;}
+   }else if(route.startsWith("/promo/sources/")&&method==="PATCH"){
+      const item=v.promo_sources.find(x=>x.id===route.split("/")[3]);if(!item)notFound();
+      Object.assign(item,data,{updated_at:nowIso()});result=item;
+   }else if(route.startsWith("/promo/sources/")&&method==="DELETE"){
+      v.promo_sources=v.promo_sources.filter(x=>x.id!==route.split("/")[3]);result={ok:true};
+   }else if(route==="/promo/findings"&&method==="POST"){
+      const url=canonicalUrl(string(data.source_url));
+      const existing=v.promo_findings.find(x=>x.source_url===url);
+      if(existing){Object.assign(existing,{last_seen_at:nowIso(),...data,source_url:url});result={duplicate:true,item:existing};}
+      else{const rec={...data,id:"finding-"+uid(),source_url:url,verified:false,
+        status:"unverified",created_at:nowIso(),last_seen_at:nowIso(),
+        tags:inferTags([data.title,data.provider,data.description].join(" "),["deals"])};v.promo_findings.unshift(rec);
+        result={duplicate:false,item:rec};}
+   }else if(route.startsWith("/promo/findings/")&&method==="DELETE"){
+      v.promo_findings=v.promo_findings.filter(x=>x.id!==route.split("/")[3]);result={ok:true};
    }else if(route==="/settings"&&method==="PATCH"){
       v.settings={...v.settings,...data};result=v.settings;
    }else if(route==="/links"&&method==="POST"){
@@ -301,6 +326,8 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  else if(route==="/watchlist")result=v.watchlist;
  else if(route.startsWith("/watchlist/"))result=v.watchlist.find(x=>x.id===route.split("/")[2])||notFound();
  else if(route==="/deals/codes")result=v.promo_codes;
+ else if(route==="/promo/sources")result=v.promo_sources;
+ else if(route==="/promo/findings")result=v.promo_findings;
  else if(route==="/prompts")result=v.prompts;
  else if(route.startsWith("/prompts/"))result=v.prompts.find(x=>x.id===route.split("/")[2])||notFound();
  else if(route==="/mailboxes")result=v.mailboxes;
@@ -317,7 +344,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  else if(route.startsWith("/search")){
    const q=lower(params.get("q")).trim();const has=(x:Dict)=>lower([x.provider,x.title,x.text,x.code,x.url,x.email,x.plan,(x.tags||[]).join(" ")].join(" ")).includes(q);
    result={subscriptions:v.subscriptions.filter(has).slice(0,50),links:v.links.filter(has).slice(0,50),
-     prompts:v.prompts.filter(has).slice(0,50),promos:v.promo_codes.filter(has).slice(0,50),
+     prompts:v.prompts.filter(has).slice(0,50),promos:v.promo_codes.filter(has).slice(0,50),promo_findings:v.promo_findings.filter(has).slice(0,50),
      accounts:v.accounts.filter(has).slice(0,50),plans:v.watchlist.filter(has).slice(0,50),reminders:v.reminders.filter(has).slice(0,50)};
  }
  else throw Error("This feature requires a backend or AI API configuration: "+route);
