@@ -1,4 +1,5 @@
 name: SubMind 2.4 model and cluster validation
+# Trigger one-off PR validation after draft PR creation.
 
 on:
   pull_request:
