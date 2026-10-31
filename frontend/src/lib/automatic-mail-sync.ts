@@ -36,9 +36,10 @@ export function autoSyncGmailOnLaunch(options:{
    const results:SyncResult[]=[];
    for(const email of selection){
      const previous=await lastGmailScan(email);
-     const days=previous?
-       Math.min(30,Math.max(7,Math.ceil((now-previous)/DAY)+2)):
-       Math.min(30,Math.max(1,options.initialDays??7));
+     const days=options.force&&options.initialDays?
+       Math.min(30,Math.max(1,options.initialDays)):
+       previous?Math.min(30,Math.max(7,Math.ceil((now-previous)/DAY)+2)):
+       7;
      if(!options.force&&previous&&now-previous<DAY){
        results.push({email,status:"up_to_date",days,scanned:0,...EMPTY,
          rejected:0,limited:false,message:"Already scanned within the last 24 hours"});
