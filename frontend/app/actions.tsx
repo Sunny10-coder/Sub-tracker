@@ -1,19 +1,24 @@
 import { useRouter } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const ACTIONS = [
+  { icon: "wallet-plus", label: "Subscription", tone: "brand", href: "/add-subscription" },
+  { icon: "account-plus", label: "Account", tone: "mint", href: "/add-account" },
+  { icon: "brain", label: "Vault & AI", tone: "peach", href: "/vault-ai" },
+  { icon: "sale", label: "Find Deals", tone: "brand", href: "/deals" },
+  { icon: "ticket-percent", label: "Promo Vault", tone: "peach", href: "/promo-vault" },
   { icon: "camera", label: "Scan Screenshot", tone: "brand", href: "/scan?mode=camera" },
   { icon: "image-multiple", label: "Choose Photo", tone: "mint", href: "/scan?mode=library" },
-  { icon: "link-variant", label: "Paste Link", tone: "peach", href: "/paste-link" },
-  { icon: "wallet-plus", label: "Add Subscription", tone: "brand", href: "/add-subscription" },
+  { icon: "link-variant", label: "Save Link", tone: "peach", href: "/paste-link" },
   { icon: "eye-plus", label: "Add Plan", tone: "mint", href: "/add-plan" },
   { icon: "bell-plus", label: "Add Reminder", tone: "peach", href: "/add-reminder" },
   { icon: "note-plus", label: "Add Note", tone: "brand", href: "/add-note" },
   { icon: "robot", label: "Ask AI", tone: "mint", href: "/(tabs)/ai" },
+  { icon: "bookmark-multiple", label: "Link Vault", tone: "mint", href: "/link-vault" },
 ] as const;
 
 export default function Actions() {
@@ -33,10 +38,10 @@ export default function Actions() {
   return (
     <View style={styles.overlay}>
       <Pressable style={styles.backdrop} testID="actions-backdrop" onPress={() => router.back()} />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 12, maxHeight: "88%" }]}>
         <View style={styles.handle} />
         <Text style={styles.title}>Add to SubMind</Text>
-        <View style={styles.grid}>
+        <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
           {ACTIONS.map((a) => (
             <Pressable key={a.label} testID={`action-${a.label}`} style={styles.tile} onPress={() => go(a.href)}>
               <View style={[styles.tileIcon, { backgroundColor: toneColor(a.tone) + "22" }]}>
@@ -45,7 +50,7 @@ export default function Actions() {
               <Text style={styles.tileLabel}>{a.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       </View>
     </View>
   );
@@ -56,8 +61,8 @@ const useStyles = makeStyles((colors) => ({
   backdrop: { ...{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }, backgroundColor: "#00000066" },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
     paddingHorizontal: 20,
     paddingTop: 12,
   },
@@ -65,6 +70,6 @@ const useStyles = makeStyles((colors) => ({
   title: { color: colors.onSurface, fontSize: 20, fontWeight: "800", marginBottom: 16 },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   tile: { width: "23%", alignItems: "center", marginBottom: 20, gap: 8 },
-  tileIcon: { width: 60, height: 60, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  tileIcon: { width: 60, height: 60, borderRadius: 2, alignItems: "center", justifyContent: "center" },
   tileLabel: { color: colors.onSurfaceSecondary, fontSize: 11, fontWeight: "600", textAlign: "center" },
 }));

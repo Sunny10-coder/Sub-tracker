@@ -1,13 +1,16 @@
 import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { ScrollView, Text, View } from "react-native";
+import { Alert, ScrollView, Text, View } from "react-native";
+import { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api, useInvalidateAll, useLink } from "@/src/lib/api";
+import { api, useInvalidateAll, useLink, useLinkReminder } from "@/src/lib/api";
 import { formatDate } from "@/src/lib/format";
 import { AppHeader, Badge, Card, Loading, PrimaryButton } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
+import { cancelLinkNotification } from "@/src/lib/link-reminders";
+import { enrichLinkWithGemini } from "@/src/lib/link-intelligence";
 
 export default function LinkDetail() {
   const styles = useStyles();
@@ -15,10 +18,23 @@ export default function LinkDetail() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, isLoading } = useLink(id!);
+  const { data, isLoading, refetch } = useLink(id!);
+  const [enriching,setEnriching]=useState(false);
+  const { data: reminder } = useLinkReminder(id!);
   const invalidate = useInvalidateAll();
 
-  const del = useMutation({ mutationFn: () => api.deleteLink(id!), onSuccess: () => { invalidate(); router.back(); } });
+  const del = useMutation({ mutationFn: () => api.deleteLink(id!), onSuccess: async () => { await cancelLinkNotification(id!); invalidate(); router.back(); } });
+  const removeReminder = useMutation({ mutationFn: () => api.deleteReminder(reminder.id), onSuccess: async () => { await cancelLinkNotification(id!); invalidate(); Alert.alert("Reminder removed", "This link remains saved in your vault."); } });
+
+  const enhance = () => Alert.alert("Enhance using Gemini?",
+    "This action sends the saved URL, title and optional note to Google's Gemini API using your configured key. It does not fetch or read the webpage. Continue?",
+    [{text:"Cancel",style:"cancel"},{text:"Enhance",onPress:async()=>{
+      if(!data)return;setEnriching(true);
+      try{const fields=await enrichLinkWithGemini(data);await api.updateLink(id!,fields);invalidate();await refetch();
+       Alert.alert("Tags updated","Gemini suggested categories and tags based on the URL and note. Review them before relying on the summary.");
+      }catch(e:any){Alert.alert("AI enhancement unavailable",e.message||String(e))}
+      finally{setEnriching(false)}
+    }}]);
 
   if (isLoading || !data) return <View style={styles.container}><AppHeader title="Link" back /><Loading /></View>;
   const l = data;
@@ -37,7 +53,7 @@ export default function LinkDetail() {
           </View>
         </Card>
 
-        {l.summary ? <Card><Text style={styles.sectionLabel}>AI summary</Text><Text style={styles.body}>{l.summary}</Text></Card> : null}
+        {l.summary ? <Card><Text style={styles.sectionLabel}>{l.enrichment==="gemini-url-note-only"?"Gemini suggestion (URL and note only)":"Saved summary / description"}</Text><Text style={styles.body}>{l.summary}</Text></Card> : null}
 
         {l.tags?.length ? (
           <View style={styles.tags}>
@@ -48,10 +64,13 @@ export default function LinkDetail() {
         {l.note ? <Card><Text style={styles.sectionLabel}>Your note</Text><Text style={styles.body}>{l.note}</Text></Card> : null}
 
         <Text style={styles.saved}>Saved {formatDate(l.created_at)}</Text>
+        {reminder ? <Card><Text style={styles.sectionLabel}>Linked reminder</Text><Text style={styles.body}>{reminder.title}</Text><Text style={styles.saved}>{formatDate(reminder.due_date)} at {reminder.remind_time || "09:00"}</Text></Card> : null}
 
         <View style={{ gap: 10 }}>
           {l.url?.startsWith("http") ? <PrimaryButton title="Open link" icon="open-in-new" onPress={() => WebBrowser.openBrowserAsync(l.url)} testID="open-link" /> : null}
-          <PrimaryButton title="Add reminder" icon="bell-plus" variant="secondary" onPress={() => router.push("/add-reminder")} />
+          <PrimaryButton title={enriching?"Classifying with Gemini…":"Enhance tags using Gemini AI"} icon="auto-fix" variant="secondary" onPress={enhance} loading={enriching} />
+          <PrimaryButton title={reminder ? "Reschedule reminder" : "Remind me about this link"} icon="bell-plus" variant="secondary" onPress={() => router.push({ pathname: "/add-reminder", params: { linkId: id!, linkTitle: l.title } })} />
+          {reminder ? <PrimaryButton title="Remove reminder" icon="bell-off" variant="secondary" loading={removeReminder.isPending} onPress={() => removeReminder.mutate()} /> : null}
           <PrimaryButton title="Delete" icon="trash-can-outline" variant="secondary" onPress={() => del.mutate()} loading={del.isPending} style={{ backgroundColor: colors.error + "18" }} testID="delete-link" />
         </View>
       </ScrollView>

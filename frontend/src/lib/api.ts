@@ -1,22 +1,49 @@
 // SubMind API client + React Query hooks. All calls go through EXPO_PUBLIC_BACKEND_URL/api.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { storage } from "@/src/utils/storage";
+import { getVault, localRequest } from "@/src/lib/local-vault";
+import * as direct from "@/src/lib/direct-providers";
 
-const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
-
-async function req<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status}: ${body}`);
-  }
-  return res.json();
+async function req<T>(path:string,opts?:RequestInit):Promise<T>{
+ if(path.startsWith("/deals/search")){const q=new URLSearchParams(path.split("?")[1]||"");return direct.deals(q.get("q")||"") as T}
+ if(path==="/ai/chat"){const question=JSON.parse(String(opts?.body||"{}")).question;const vault=await getVault();
+ const context="You are SubMind. Answer from user records, never invent renewals or verified coupons. Unknown status means unknown. Private data:\n"+JSON.stringify({subscriptions:vault.subscriptions.slice(0,160),accounts:vault.accounts.slice(0,100),benefits:vault.benefits.slice(0,60),links:vault.links.slice(0,80).map((l:any)=>({title:l.title,url:l.url,category:l.category,tags:l.tags})),promos:vault.promo_codes.slice(0,60),prompts:vault.prompts.slice(0,60).map((p:any)=>({title:p.title,category:p.category,tags:p.tags}))}).slice(0,32000);
+ return direct.chat(question,context) as T}
+ if(path==="/ai/chat/history")return [] as T;
+ return localRequest<T>(path,opts);
 }
-
 export const api = {
+  health: () => req<any>("/"),
   insights: () => req<any>("/insights"),
+  dealsSearch: (q: string, mode = "all", refresh = false) => req<any>(`/deals/search?q=${encodeURIComponent(q)}&mode=${mode}&refresh=${refresh}`),
+  inspectDeal: (url: string) => req<any>("/deals/inspect", { method: "POST", body: JSON.stringify({ url }) }),
+  promoCodes: () => req<any[]>("/deals/codes"),
+  promoSources: () => req<any[]>("/promo/sources"),
+  addPromoSource: (b: any) => req<any>("/promo/sources", { method: "POST", body: JSON.stringify(b) }),
+  updatePromoSource: (id: string, b: any) => req<any>("/promo/sources/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(b) }),
+  deletePromoSource: (id: string) => req<any>("/promo/sources/" + encodeURIComponent(id), { method: "DELETE" }),
+  promoFindings: () => req<any[]>("/promo/findings"),
+  savePromoFinding: (b: any) => req<any>("/promo/findings", { method: "POST", body: JSON.stringify(b) }),
+  deletePromoFinding: (id: string) => req<any>("/promo/findings/" + encodeURIComponent(id), { method: "DELETE" }),
+  prompts: () => req<any[]>("/prompts"),
+  createPrompt: (b: any) => req<any>("/prompts", { method: "POST", body: JSON.stringify(b) }),
+  updatePrompt: (id: string, b: any) => req<any>("/prompts/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(b) }),
+  deletePrompt: (id: string) => req<any>("/prompts/" + encodeURIComponent(id), { method: "DELETE" }),
+  mailboxes: () => req<any[]>("/mailboxes"),
+  reviewQueue: () => req<any[]>("/review-queue"),
+  importMail: (mailbox: string, records: any[]) => req<any>("/mail/ingest", { method: "POST", body: JSON.stringify({ mailbox, records }) }),
+  autoSyncMail: (mailbox: string, records: any[]) => req<any>("/mail/auto-sync", { method: "POST", body: JSON.stringify({ mailbox, records }) }),
+  smartSyncMail: (mailbox: string, records: any[], meta?: {days?:number;messages_scanned?:number;limited?:boolean}) => req<{added:number;updated:number;duplicate:number;review:number;ignored:number;review_pending:number}>("/mail/smart-sync", { method:"POST",body:JSON.stringify({mailbox,records,...meta}) }),
+  cleanupLegacyMail: () => req<{removed:number;preserved:number}>("/mail/cleanup-legacy", { method: "POST", body: "{}" }),
+  savePromoCode: (b: any) => req<any>("/deals/codes", { method: "POST", body: JSON.stringify(b) }),
+  priceHistory: (provider = "") => req<any[]>(`/deals/price-history?provider=${encodeURIComponent(provider)}`),
+  trackPrice: (b: any) => req<any>("/deals/track-price", { method: "POST", body: JSON.stringify(b) }),
+  vaultDashboard: () => req<any>("/vault/dashboard"),
+  accounts: () => req<any[]>("/accounts"),
+  createAccount: (b: any) => req<any>("/accounts", { method: "POST", body: JSON.stringify(b) }),
+  updateAccount: (id: string, b: any) => req<any>(`/accounts/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  deleteAccount: (id: string) => req<any>(`/accounts/${id}`, { method: "DELETE" }),
+  checkDuplicate: (b: any) => req<any>("/subscriptions/check-duplicate", { method: "POST", body: JSON.stringify(b) }),
   subscriptions: (status?: string, category?: string) => {
     const p = new URLSearchParams();
     if (status) p.set("status", status);
@@ -34,6 +61,8 @@ export const api = {
 
   links: (source?: string) => req<any[]>(`/links${source && source !== "All" ? `?source=${source}` : ""}`),
   link: (id: string) => req<any>(`/links/${id}`),
+  linkReminder: (id: string) => req<any>(`/links/${id}/reminder`),
+  putLinkReminder: (id: string, b: any) => req<any>(`/links/${id}/reminder`, {method: "PUT", body: JSON.stringify(b)}),
   updateLink: (id: string, b: any) => req<any>(`/links/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteLink: (id: string) => req<any>(`/links/${id}`, { method: "DELETE" }),
 
@@ -50,7 +79,7 @@ export const api = {
 
   ingestText: (text: string, source = "manual") => req<any>("/ingest/text", { method: "POST", body: JSON.stringify({ text, source }) }),
   ingestImage: (image_base64: string, source = "screenshot") => req<any>("/ingest/image", { method: "POST", body: JSON.stringify({ image_base64, source }) }),
-  ingestLink: (url: string, source = "share", text = "") => req<any>("/ingest/link", { method: "POST", body: JSON.stringify({ url, source, text }) }),
+  ingestLink: (url: string, source = "share", text = "", reminder?: {reminder_date?: string; reminder_time?: string; reminder_title?: string}) => req<any>("/ingest/link", { method: "POST", body: JSON.stringify({ url, source, text, ...reminder }) }),
 
   graph: () => req<any>("/graph"),
   search: (q: string) => req<any>(`/search?q=${encodeURIComponent(q)}`),
@@ -61,16 +90,19 @@ export const api = {
   settings: () => req<any>("/settings"),
   patchSettings: (b: any) => req<any>("/settings", { method: "PATCH", body: JSON.stringify(b) }),
 
-  transcribe: async (uri: string): Promise<{ text: string }> => {
-    const form = new FormData();
-    form.append("file", { uri, name: "voice.m4a", type: "audio/mp4" } as any);
-    const res = await fetch(`${BASE}/stt/transcribe`, { method: "POST", body: form as any });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json();
-  },
+  transcribe: async (_uri: string): Promise<{ text: string }> => { throw Error("Voice transcription requires a separate provider integration."); },
 };
 
 // ------- hooks -------
+export const usePromoCodes = () => useQuery({ queryKey: ["promo-codes"], queryFn: api.promoCodes });
+export const usePromoSources = () => useQuery({ queryKey: ["promo-sources"], queryFn: api.promoSources });
+export const usePromoFindings = () => useQuery({ queryKey: ["promo-findings"], queryFn: api.promoFindings });
+export const usePrompts = () => useQuery({ queryKey: ["prompts"], queryFn: api.prompts });
+export const useMailboxes = () => useQuery({ queryKey: ["mailboxes"], queryFn: api.mailboxes });
+export const useReviewQueue = () => useQuery({ queryKey: ["review-queue"], queryFn: api.reviewQueue });
+export const usePriceHistory = (provider = "") => useQuery({ queryKey: ["price-history", provider], queryFn: () => api.priceHistory(provider) });
+export const useVaultDashboard = () => useQuery({ queryKey: ["vault-dashboard"], queryFn: api.vaultDashboard });
+export const useAccounts = () => useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
 export const useInsights = () => useQuery({ queryKey: ["insights"], queryFn: api.insights });
 export const useSubscriptions = (status?: string, category?: string) =>
   useQuery({ queryKey: ["subscriptions", status, category], queryFn: () => api.subscriptions(status, category) });
@@ -78,6 +110,7 @@ export const useSubscription = (id: string) =>
   useQuery({ queryKey: ["subscription", id], queryFn: () => api.subscription(id), enabled: !!id });
 export const useInbox = (tab: string) => useQuery({ queryKey: ["inbox", tab], queryFn: () => api.inbox(tab) });
 export const useLinks = (source?: string) => useQuery({ queryKey: ["links", source], queryFn: () => api.links(source) });
+export const useLinkReminder = (id: string) => useQuery({ queryKey: ["link-reminder", id], queryFn: () => api.linkReminder(id), enabled: !!id });
 export const useLink = (id: string) => useQuery({ queryKey: ["link", id], queryFn: () => api.link(id), enabled: !!id });
 export const useWatchlist = () => useQuery({ queryKey: ["watchlist"], queryFn: api.watchlist });
 export const usePlan = (id: string) => useQuery({ queryKey: ["plan", id], queryFn: () => api.plan(id), enabled: !!id });
@@ -88,7 +121,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["insights", "subscriptions", "inbox", "links", "watchlist", "reminders", "graph"].forEach((k) =>
+    ["promo-codes", "promo-sources", "promo-findings", "prompts", "mailboxes", "review-queue", "price-history", "vault-dashboard", "accounts", "insights", "subscriptions", "subscription", "inbox", "links", "link", "watchlist", "plan", "reminders", "link-reminder", "graph"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }

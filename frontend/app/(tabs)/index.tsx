@@ -1,211 +1,170 @@
+/** SubMind Metro Home: genuine data, animated live tiles, no mock metrics. */
 import { useRouter } from "expo-router";
+import { useMemo } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { TAB_BAR_SPACE } from "./_layout";
-import { useInsights, useLinks, useSubscriptions, useWatchlist } from "@/src/lib/api";
-import { money, relativeDate } from "@/src/lib/format";
-import { Card, Icon, Loading } from "@/src/components/ui";
-import { accentFor, makeStyles, useTheme } from "@/src/theme";
+import { useInsights, useSubscriptions, useVaultDashboard } from "@/src/lib/api";
+import { daysUntil, formatDate, money } from "@/src/lib/format";
+import { Icon } from "@/src/components/ui";
+import { METRO, MetroBrand, MetroSection, MetroTile, useLiveMetroIndex } from "@/src/components/metro-tiles";
 
-function greeting() {
-  const h = new Date().getHours();
-  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+const GAP = METRO.gap;
+const ACTIONS = [
+  { label: "ADD PLAN", icon: "plus-circle-outline", route: "/add-subscription" },
+  { label: "ACCOUNT", icon: "account-plus", route: "/add-account" },
+  { label: "SAVE LINK", icon: "bookmark-plus-outline", route: "/paste-link" },
+  { label: "IMPORT", icon: "file-import-outline", route: "/import-data" },
+] as const;
+const AI_QUESTIONS = [
+  "What renews next week?",
+  "Which credits expire soon?",
+  "Find unused subscriptions.",
+];
+function nextDate(sub: any): string | null {
+  const ending = sub.auto_renew === false || ["Cancelled", "Canceled"].includes(sub.status);
+  return ending ? sub.access_end || sub.trial_end || null :
+    sub.status === "Trial" ? sub.trial_end || sub.renewal_date || null : sub.renewal_date || null;
 }
-
-const QUICK = [
-  { icon: "camera", label: "Scan", href: "/scan?mode=camera", key: "accentRed" },
-  { icon: "link-variant", label: "Paste", href: "/paste-link", key: "accentBlue" },
-  { icon: "chat-processing", label: "Ask AI", href: "/(tabs)/ai", key: "accentPurple" },
-  { icon: "wallet-plus", label: "Add", href: "/add-subscription", key: "accentGreen" },
-];
-
-const SHORTCUTS = [
-  { icon: "bookmark-multiple", label: "Link Vault", href: "/link-vault" },
-  { icon: "eye-check", label: "Watchlist", href: "/watchlist" },
-  { icon: "bell", label: "Reminders", href: "/reminders" },
-  { icon: "chart-donut", label: "Insights", href: "/insights" },
-  { icon: "graph", label: "Brain Map", href: "/graph" },
-];
 
 export default function Home() {
-  const styles = useStyles();
-  const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const ins = useInsights();
-  const links = useLinks();
-  const watch = useWatchlist();
-  const subs = useSubscriptions();
+  const insets = useSafeAreaInsets();
+  const insights = useInsights();
+  const vault = useVaultDashboard();
+  const subscriptions = useSubscriptions();
+  const live = useLiveMetroIndex(3, 10400);
+  const data = insights.data;
+  const subs = subscriptions.data || [];
+  const total = data?.total_count ?? subs.length;
+  const active = data?.active_count ?? subs.filter((x: any) => ["Active", "Trial"].includes(x.status)).length;
+  const accounts = vault.data?.accounts ?? 0;
+  const trialCount = data?.trials_ending?.length ?? 0;
+  const renewals = data?.renewals_30d?.length ?? 0;
+  const moneyRows = Object.entries(vault.data?.monthly_by_currency || data?.monthly_by_currency || {})
+    .filter(([, amount]) => typeof amount === "number" && Number.isFinite(amount));
+  const upcoming = useMemo(() => subs
+    .map((s: any) => ({ ...s, nextDate: nextDate(s) }))
+    .map((s: any) => ({ ...s, days: daysUntil(s.nextDate) }))
+    .filter((s: any) => s.days !== null && s.days >= 0 && s.days <= 30)
+    .sort((a: any, b: any) => a.days - b.days).slice(0, 4), [subscriptions.data]);
+  const urgent = upcoming.filter((s: any) => s.days <= 7 && s.auto_renew !== false &&
+    !["Cancelled", "Canceled"].includes(s.status)).length;
+  const selected = upcoming.length ? upcoming[live % upcoming.length] : null;
+  const refreshing = insights.isFetching || vault.isFetching || subscriptions.isFetching;
+  const refresh = () => { insights.refetch(); vault.refetch(); subscriptions.refetch(); };
+  const open = (route: string) => router.push(route as any);
 
-  const data = ins.data;
-  const cur = data?.currency || "AED";
-  const today = new Date();
-  const dateStr = today.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const weekday = today.toLocaleDateString(undefined, { weekday: "long" });
-
-  const refreshing = ins.isFetching || links.isFetching || watch.isFetching;
-  const refetchAll = () => { ins.refetch(); links.refetch(); watch.refetch(); subs.refetch(); };
-
-  const renews = data?.renewals_30d?.length ?? 0;
-  const trials = data?.trials_ending?.length ?? 0;
-
-  return (
-    <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 14, paddingBottom: TAB_BAR_SPACE + insets.bottom }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refetchAll} tintColor={colors.brandPrimary} />}
-      >
-        <View style={styles.topRow}>
-          <Text style={styles.hi}>{greeting()}</Text>
-          <View style={styles.dateBox}>
-            <View style={styles.dateDot} />
-            <Text style={styles.dateText}>{dateStr}  ·  {weekday}</Text>
-          </View>
+  return <View style={{ flex: 1, backgroundColor: METRO.black }}>
+    <ScrollView showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 14, paddingBottom: TAB_BAR_SPACE + insets.bottom + 28 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={METRO.cyan}/>}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 19, paddingHorizontal: 3 }}>
+        <View>
+          <MetroBrand/>
+          <Text style={{ color: METRO.dim, fontSize: 11, letterSpacing: 1.5, fontWeight: "700", marginTop: 2 }}>
+            YOUR SUBSCRIPTIONS AT A GLANCE
+          </Text>
         </View>
-        <Text style={styles.brand}>SubMind</Text>
-
-        {ins.isLoading ? (
-          <Loading />
-        ) : (
-          <>
-            {/* Expressive dark hero card */}
-            <View style={styles.hero}>
-              <Text style={styles.heroLead}>Here is your money memory today.</Text>
-              <Text style={styles.heroBig}>
-                You are spending{" "}
-                <Text style={[styles.hl, { color: colors.accentYellow }]}>{money(data?.monthly_spend, cur)}</Text>
-                <Text style={styles.heroBig}> a month across </Text>
-                <Text style={[styles.hl, { color: colors.accentGreen }]}>{data?.active_count ?? 0} subs</Text>
-                <Text style={styles.heroBig}>. </Text>
-                <Text style={[styles.hl, { color: colors.accentOrange }]}>{renews}</Text>
-                <Text style={styles.heroBig}> renew soon and </Text>
-                <Text style={[styles.hl, { color: colors.accentPink }]}>{trials} trials</Text>
-                <Text style={styles.heroBig}> are ending.</Text>
-              </Text>
-              <View style={styles.heroChips}>
-                <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Yearly</Text><Text style={styles.heroChipValue}>{money(data?.yearly_spend, cur)}</Text></View>
-                <View style={styles.heroChip}><Text style={styles.heroChipLabel}>Renews 30d</Text><Text style={styles.heroChipValue}>{renews}</Text></View>
-              </View>
-            </View>
-
-            {/* Quick actions */}
-            <View style={styles.quickRow}>
-              {QUICK.map((q) => (
-                <Card key={q.label} style={[styles.quick, { backgroundColor: (colors as any)[q.key] }]} onPress={() => router.push(q.href as any)} testID={`quick-${q.label}`}>
-                  <Icon name={q.icon} size={24} color={colors.onAccent} />
-                  <Text style={styles.quickLabel}>{q.label}</Text>
-                </Card>
-              ))}
-            </View>
-
-            {/* Shortcuts */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcutRow}>
-              {SHORTCUTS.map((s) => (
-                <Card key={s.label} style={styles.shortcut} onPress={() => router.push(s.href as any)} testID={`shortcut-${s.label}`}>
-                  <Icon name={s.icon} size={18} color={colors.onSurface} />
-                  <Text style={styles.shortcutLabel}>{s.label}</Text>
-                </Card>
-              ))}
-            </ScrollView>
-
-            {/* Upcoming renewals */}
-            <Section title="Upcoming renewals" onSeeAll={() => router.push("/(tabs)/subscriptions")}>
-              {data?.renewals_30d?.length ? (
-                data.renewals_30d.slice(0, 4).map((r: any, i: number) => (
-                  <Pressable key={r.id} testID={`renew-${r.id}`} onPress={() => router.push(`/subscription/${r.id}`)} style={[styles.bubble, { backgroundColor: accentFor(colors, r.provider || i) }]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.bubbleTitle} numberOfLines={1}>{r.provider}</Text>
-                      <Text style={styles.bubbleSub}>Renews {relativeDate(r.date)}</Text>
-                    </View>
-                    <Text style={styles.bubbleAmount}>{money(r.price, r.currency || cur)}</Text>
-                    <Icon name="chevron-right" size={22} color={colors.onAccent} />
-                  </Pressable>
-                ))
-              ) : (
-                <EmptyRow text="No renewals in the next 30 days." />
-              )}
-            </Section>
-
-            {/* Recent links */}
-            <Section title="Recent saved links" onSeeAll={() => router.push("/link-vault")}>
-              {links.data?.length ? (
-                links.data.slice(0, 3).map((l: any, i: number) => (
-                  <Card key={l.id} style={styles.linkRow} onPress={() => router.push(`/link/${l.id}`)}>
-                    <View style={[styles.linkIcon, { backgroundColor: accentFor(colors, l.title || i) }]}>
-                      <Icon name="link-variant" size={20} color={colors.onAccent} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.linkTitle} numberOfLines={1}>{l.title}</Text>
-                      <Text style={styles.linkSub} numberOfLines={1}>{l.source} · {l.category}</Text>
-                    </View>
-                  </Card>
-                ))
-              ) : (
-                <EmptyRow text="Share a link to SubMind to start your vault." />
-              )}
-            </Section>
-          </>
-        )}
-      </ScrollView>
-    </View>
-  );
-}
-
-// Lightweight helpers for the home sections.
-function EmptyRow({ text }: { text: string }) {
-  const styles = useStyles();
-  return <Card><Text style={styles.muted}>{text}</Text></Card>;
-}
-
-function Section({ title, children, onSeeAll }: any) {
-  const styles = useStyles();
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHead}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {onSeeAll ? <Text style={styles.seeAll} onPress={onSeeAll}>See all</Text> : null}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Pressable onPress={() => open("/(tabs)/ai")} accessibilityLabel="Ask SubMind AI"
+            style={{ backgroundColor: METRO.cyan, width: 41, height: 36, alignItems: "center", justifyContent: "center" }}>
+            <Icon name="robot-outline" color={METRO.white} size={25}/>
+          </Pressable>
+          <Pressable onPress={() => open("/reminders")} accessibilityLabel="View reminders"
+            style={{ width: 42, height: 39, justifyContent: "center", alignItems: "center" }}>
+            <Icon name="bell-outline" color={METRO.white} size={27}/>
+            {urgent > 0 ? <View style={{ backgroundColor: METRO.red, paddingHorizontal: 5, position: "absolute", top: 0, right: 0 }}>
+              <Text style={{ color: METRO.white, fontSize: 10, fontWeight: "900" }}>{urgent > 99 ? "99+" : urgent}</Text>
+            </View> : null}
+          </Pressable>
+          <Pressable onPress={() => open("/settings")} accessibilityLabel="Settings"
+            style={{ borderWidth: 2, borderColor: METRO.cyan, height: 42, width: 42, borderRadius: 21,
+              justifyContent: "center", alignItems: "center" }}>
+            <Icon name="cog-outline" color={METRO.white} size={25}/>
+          </Pressable>
+        </View>
       </View>
-      <View style={{ gap: 10 }}>{children}</View>
-    </View>
-  );
-}
+      <MetroTile color={METRO.cyan} textColor={METRO.ink} value={active}
+        title="Active subscriptions"
+        subtitle={active ? String(total) + " tracked plans and historical records" : "Ready to load your personal tracker"}
+        caption="Tap to open subscriptions" height={224}
+        onPress={() => open("/(tabs)/subscriptions")} testID="metro-active-subscriptions"/>
+      <View style={{ height: GAP }}/>
+      <View style={{ flexDirection: "row", gap: GAP }}>
+        <MetroTile color={METRO.orange} textColor={METRO.ink} title="Upcoming renewals"
+          value={renewals} subtitle="Next 30 days" caption="Review before billing"
+          height={210} style={{ flex: 1 }} onPress={() => open("/(tabs)/renewals")} testID="metro-renewals"/>
+        <MetroTile color={METRO.red} title="Trials ending" value={trialCount}
+          subtitle={urgent > 0 ? String(urgent) + " action(s) in 7 days" : "Review before charge"}
+          height={210} style={{ flex: 1 }} onPress={() => open("/(tabs)/renewals")} testID="metro-trials"/>
+      </View>
+      <View style={{ height: GAP }}/>
+      <MetroTile color={METRO.purple} title="Accounts & emails" icon="account-multiple-outline"
+        subtitle={String(accounts) + " account identities · sign-ins · benefits"}
+        horizontal height={116} onPress={() => open("/(tabs)/account-hub")} testID="metro-accounts"/>
+      <View style={{ height: GAP }}/>
+      <MetroTile color={METRO.green} title="Ask SubMind AI" icon="auto-fix"
+        subtitle={AI_QUESTIONS[live]} liveKey={live} horizontal height={125}
+        onPress={() => open("/(tabs)/ai")} testID="metro-ai"/>
+      <View style={{ height: GAP }}/>
+      <View style={{ flexDirection: "row", gap: GAP }}>
+        <MetroTile color={METRO.cobalt} icon="graph" title="Brain Map" height={134}
+          style={{ flex: 1 }} onPress={() => open("/graph")} testID="metro-brain-map"/>
+        <MetroTile color={METRO.pink} icon="ticket-percent-outline" title="Promo Vault" height={134}
+          style={{ flex: 1 }} onPress={() => open("/promo-vault")} testID="metro-promo-vault"/>
+      </View>
+      <View style={{ height: GAP }}/>
+      <View style={{ flexDirection: "row", gap: GAP }}>
+        <MetroTile color={METRO.teal} icon="auto-fix" title="AI Prompts" height={128}
+          style={{ flex: 1 }} onPress={() => open("/prompt-vault")} testID="metro-ai-prompts"/>
+        <MetroTile color={METRO.purple} icon="bookmark-multiple-outline" title="Link Vault" height={128}
+          style={{ flex: 1 }} onPress={() => open("/link-vault")} testID="metro-link-vault"/>
+      </View>
 
-const useStyles = makeStyles((colors) => ({
-  container: { flex: 1, backgroundColor: colors.surface },
-  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22 },
-  hi: { color: colors.muted, fontSize: 15, fontWeight: "700" },
-  dateBox: { flexDirection: "row", alignItems: "center", gap: 6 },
-  dateDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accentOrange },
-  dateText: { color: colors.onSurfaceTertiary, fontSize: 13, fontWeight: "700" },
-  brand: { color: colors.onSurface, fontSize: 40, fontWeight: "800", letterSpacing: -1.2, paddingHorizontal: 22, marginTop: 2 },
-  hero: { backgroundColor: colors.surfaceInverse, marginHorizontal: 18, marginTop: 16, borderRadius: 30, padding: 24 },
-  heroLead: { color: "#FFFFFF99", fontSize: 14, fontWeight: "700", marginBottom: 10 },
-  heroBig: { color: colors.onSurfaceInverse, fontSize: 25, fontWeight: "800", lineHeight: 34, letterSpacing: -0.5 },
-  hl: { fontSize: 25, fontWeight: "800", lineHeight: 34, letterSpacing: -0.5 },
-  heroChips: { flexDirection: "row", gap: 10, marginTop: 20 },
-  heroChip: { backgroundColor: "#FFFFFF14", borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10, flex: 1 },
-  heroChipLabel: { color: "#FFFFFF99", fontSize: 12, fontWeight: "700" },
-  heroChipValue: { color: "#FFFFFF", fontSize: 18, fontWeight: "800", marginTop: 2 },
-  quickRow: { flexDirection: "row", gap: 10, paddingHorizontal: 18, marginTop: 18 },
-  quick: { flex: 1, alignItems: "center", gap: 8, paddingVertical: 16, paddingHorizontal: 4, borderWidth: 0, borderRadius: 22 },
-  quickLabel: { color: colors.onAccent, fontSize: 12, fontWeight: "800" },
-  shortcutRow: { gap: 10, paddingHorizontal: 18, marginTop: 16 },
-  shortcut: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 999 },
-  shortcutLabel: { color: colors.onSurfaceSecondary, fontSize: 13, fontWeight: "700" },
-  section: { marginTop: 26, paddingHorizontal: 18 },
-  sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  sectionTitle: { color: colors.onSurface, fontSize: 20, fontWeight: "800", letterSpacing: -0.4 },
-  seeAll: { color: colors.brandPrimary, fontSize: 14, fontWeight: "800" },
-  bubble: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 22, paddingHorizontal: 18, paddingVertical: 16 },
-  bubbleTitle: { color: colors.onAccent, fontSize: 16, fontWeight: "800" },
-  bubbleSub: { color: colors.onAccent, opacity: 0.75, fontSize: 13, marginTop: 2, fontWeight: "600" },
-  bubbleAmount: { color: colors.onAccent, fontSize: 16, fontWeight: "800" },
-  bubblePress: { ...{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 } },
-  linkRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  linkIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  linkTitle: { color: colors.onSurfaceSecondary, fontSize: 15, fontWeight: "700" },
-  linkSub: { color: colors.muted, fontSize: 13, marginTop: 2 },
-  muted: { color: colors.muted, fontSize: 14 },
-}));
+      <MetroSection title="Quick actions" trailing={
+        <Pressable onPress={() => open("/actions")} accessibilityLabel="All quick actions">
+          <Text style={{ color: METRO.cyan, fontWeight: "800", fontSize: 13 }}>ALL ACTIONS  →</Text>
+        </Pressable>
+      }/>
+      <View style={{ flexDirection: "row", gap: GAP }}>
+        {ACTIONS.map((a, i) => <Pressable key={a.label} onPress={() => open(a.route)}
+          style={{ backgroundColor: [METRO.cyan, METRO.purple, METRO.orange, METRO.green][i], flex: 1,
+            height: 74, justifyContent: "space-between", paddingVertical: 8, paddingHorizontal: 4, alignItems: "center" }}>
+          <Icon name={a.icon} size={24} color={i === 0 || i === 2 ? METRO.ink : METRO.white}/>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: i === 0 || i === 2 ? METRO.ink : METRO.white,
+            fontSize: 10, fontFamily: "sans-serif-condensed", fontWeight: "900" }}>{a.label}</Text>
+        </Pressable>)}
+      </View>
+
+      <MetroSection title="Live activity"/>
+      <MetroTile color={METRO.cobalt} title={selected ? selected.provider : "Upcoming activity"}
+        subtitle={selected ? (selected.auto_renew === false ? "Access ends " : "Review by ") +
+          formatDate(selected.nextDate) + " · " + (selected.days === 0 ? "today" : String(selected.days) + " days") :
+          "Renewals and trial endings appear here when dates are available."}
+        icon={selected ? "calendar-clock" : "calendar-check"} liveKey={live} horizontal height={116}
+        onPress={() => selected ? open("/subscription/" + selected.id) : open("/(tabs)/renewals")}
+        testID="metro-live-activity"/>
+      <View style={{ height: GAP }}/>
+      <MetroTile color={METRO.orange} textColor={METRO.ink} icon="chart-donut" title="Spending overview"
+        subtitle={moneyRows.length ? moneyRows.map(([c, a]) => money(Number(a), c)).join(" · ") + " per month" :
+          "No confirmed recurring rates yet"}
+        horizontal height={115} onPress={() => open("/(tabs)/spending")} testID="metro-spending"/>
+
+      <MetroSection title="More"/>
+      <MetroTile color={METRO.purple} icon="view-dashboard" title="Vault & AI"
+        subtitle="AI · Prompts · Brain Map · Promo codes · Saved links"
+        horizontal height={110} onPress={() => open("/vault-ai")} testID="metro-vault-home"/>
+      {total === 0 ? <Pressable onPress={() => open("/import-data")}
+        style={{ marginTop: 12, padding: 13, backgroundColor: "#171717", borderWidth: 1, borderColor: METRO.cyan }}>
+        <Text style={{ color: METRO.cyan, fontWeight: "900", fontSize: 15 }}>IMPORT YOUR PRIVATE TRACKER  →</Text>
+        <Text style={{ color: METRO.white, fontSize: 12, lineHeight: 18, marginTop: 5 }}>
+          Load subscriptions, accounts and promo codes from your private JSON file.
+        </Text>
+      </Pressable> : null}
+      <Text style={{ color: METRO.dim, fontSize: 10, letterSpacing: 1.2, textAlign: "center", marginTop: 21 }}>
+        SUBMIND METRO · LIVE TILES · PRIVATE BY DESIGN
+      </Text>
+    </ScrollView>
+  </View>;
+}

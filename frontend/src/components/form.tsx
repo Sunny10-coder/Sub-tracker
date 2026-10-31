@@ -58,7 +58,7 @@ const useStyles = makeStyles((colors) => ({
   label: { color: colors.onSurfaceTertiary, fontSize: 13, fontWeight: "800", marginLeft: 4 },
   input: {
     backgroundColor: colors.surfaceSecondary,
-    borderRadius: 16,
+    borderRadius: 2,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 16,

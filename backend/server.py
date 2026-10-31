@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
+from deals_engine import search_deals, safe_fetch_page, find_codes, find_prices
+from vault_intelligence import normalized_name, normalized_email, account_identity, find_subscription_match, canonicalize_url, content_fingerprint, spend_by_currency, validate_reminder_schedule
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -43,6 +45,7 @@ EXTRACTION_SCHEMA_HINT = """Return ONLY a strict JSON object (no markdown, no pr
 {
   "content_type": one of ["subscription","trial","plan","link","reminder","payment","note","unknown"],
   "provider": string,
+  "account_email": string (only if explicitly visible, otherwise empty),
   "product": string,
   "plan": string,
   "price": number or null,
@@ -133,6 +136,7 @@ def _normalize_extraction(d: Dict[str, Any], source_type: str) -> Dict[str, Any]
     out = {
         "content_type": s(d.get("content_type") or "unknown").lower(),
         "provider": s(d.get("provider")),
+        "account_email": normalized_email(d.get("account_email")),
         "product": s(d.get("product")),
         "plan": s(d.get("plan")),
         "price": d.get("price") if isinstance(d.get("price"), (int, float)) else None,
@@ -225,18 +229,13 @@ async def get_settings() -> dict:
 # Ingest pipeline
 # ---------------------------------------------------------------------------
 async def _find_duplicate(extraction: dict) -> Optional[dict]:
-    prov = extraction.get("provider", "").strip().lower()
-    prod = extraction.get("product", "").strip().lower()
-    if not prov and not prod:
-        return None
-    subs = await db.subscriptions.find(await base_query()).to_list(500)
-    for sub in subs:
-        sp = (sub.get("provider") or "").strip().lower()
-        spr = (sub.get("product") or "").strip().lower()
-        if prov and sp and prov == sp:
-            return clean(sub)
-        if prod and spr and prod == spr:
-            return clean(sub)
+    """Only automatically dedupe known identities; ambiguous items need review."""
+    subs = await db.subscriptions.find(await base_query()).to_list(1000)
+    match, kind = find_subscription_match(extraction, subs)
+    if match:
+        result = clean(match)
+        result["_match_kind"] = kind
+        return result
     return None
 
 
@@ -311,6 +310,8 @@ async def _create_subscription_from(ex: dict, source: str, url: str, image: Opti
         "provider": ex.get("provider") or ex.get("product") or "Unknown",
         "product": ex.get("product") or ex.get("provider") or "Unknown",
         "plan": ex.get("plan", ""), "category": ex.get("category", "Other"),
+        "account_email": normalized_email(ex.get("account_email")),
+        "account_id": ex.get("account_id"),
         "status": status, "price": ex.get("price"), "currency": ex.get("currency", "AED"),
         "billing_cycle": ex.get("billing_cycle") or "monthly",
         "renewal_date": ex.get("renewal_date"), "start_date": ex.get("renewal_date"),
@@ -375,6 +376,9 @@ class IngestLink(BaseModel):
     url: str
     source: str = "share"
     text: str = ""
+    reminder_date: Optional[str] = None
+    reminder_time: str = "09:00"
+    reminder_title: Optional[str] = None
 
 
 class IngestNotification(BaseModel):
@@ -443,20 +447,97 @@ async def _fetch_metadata(url: str) -> dict:
         return {"title": "", "thumbnail": None, "description": "", "text": ""}
 
 
+def _safe_canonical(url: str) -> str:
+    try:
+        return canonicalize_url(url)
+    except (ValueError, OverflowError):
+        return ""
+
+
+async def _upsert_link_reminder(link_id: str, date: str, time: str, title: str) -> dict:
+    validate_reminder_schedule(date, time)
+    link = await db.saved_links.find_one({"id": link_id, "user_id": USER_ID, "deleted_at": None})
+    if not link:
+        raise HTTPException(404, "Saved link not found")
+    existing = await db.reminders.find_one(await base_query({"ref_type": "link", "ref_id": link_id, "completed": False}))
+    if existing:
+        await db.reminders.update_one({"id": existing["id"], "user_id": USER_ID},
+                                      {"$set": {"due_date": date, "remind_time": time, "title": title,
+                                                "updated_at": now_iso()}})
+        rid = existing["id"]
+    else:
+        rid = str(uuid.uuid4())
+        await db.reminders.insert_one({"id": rid, "user_id": USER_ID, "deleted_at": None,
+                                        "title": title, "due_date": date, "remind_time": time,
+                                        "kind": "saved_link", "ref_type": "link", "ref_id": link_id,
+                                        "completed": False, "created_at": now_iso()})
+    await db.saved_links.update_one({"id": link_id, "user_id": USER_ID}, {"$set": {"reminder_id": rid, "updated_at": now_iso()}})
+    return clean(await db.reminders.find_one({"id": rid}))
+
+
+@api.put("/links/{lid}/reminder")
+async def put_link_reminder(lid: str, body: Dict[str, Any]):
+    date = body.get("due_date")
+    time = body.get("remind_time", "09:00")
+    try:
+        validate_reminder_schedule(date, time)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    return await _upsert_link_reminder(lid, date, time, str(body.get("title") or "Review saved link")[:180])
+
+
+@api.get("/links/{lid}/reminder")
+async def get_link_reminder(lid: str):
+    link = await db.saved_links.find_one(await base_query({"id": lid}))
+    if not link:
+        raise HTTPException(404, "Saved link not found")
+    rem = await db.reminders.find_one(await base_query({"ref_type": "link", "ref_id": lid, "completed": False}))
+    return clean(rem) if rem else None
+
+
 @api.post("/ingest/link")
 async def ingest_link(body: IngestLink):
-    # 1. Save link immediately (enrichment pending)
+    # Canonical URL deduplication; return the existing item instead of creating copies.
+    try:
+        canonical = canonicalize_url(body.url)
+    except (ValueError, OverflowError) as exc:
+        raise HTTPException(422, str(exc))
+    if body.reminder_date:
+        try:
+            validate_reminder_schedule(body.reminder_date, body.reminder_time)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+    existing = await db.saved_links.find_one(await base_query({"canonical_url": canonical}))
+    if not existing:
+        # Compatibility with pre-canonicalization records.
+        candidates = await db.saved_links.find(await base_query()).to_list(1000)
+        existing = next((doc for doc in candidates
+                         if isinstance(doc.get("url"), str)
+                         and _safe_canonical(doc.get("url")) == canonical), None)
+    if existing:
+        if body.text and body.text.strip() and body.text.strip() not in str(existing.get("note") or ""):
+            await db.saved_links.update_one({"id": existing["id"], "user_id": USER_ID},
+                                            {"$set": {"note": (str(existing.get("note") or "") + "\\n" + body.text.strip()).strip()[:2000],
+                                                      "updated_at": now_iso()}})
+        if body.reminder_date:
+            await _upsert_link_reminder(existing["id"], body.reminder_date, body.reminder_time,
+                                        body.reminder_title or existing.get("title") or "Review saved link")
+        return {"link_id": existing["id"], "duplicate": True, "link": clean(await db.saved_links.find_one({"id": existing["id"]}))}
+
     lid = str(uuid.uuid4())
-    domain = re.sub(r"^https?://(www\.)?", "", body.url).split("/")[0]
+    domain = canonical.split("/")[2]
     base_link = {
         "id": lid, "user_id": USER_ID, "deleted_at": None,
-        "url": body.url, "canonical_url": body.url,
+        "url": body.url.strip(), "canonical_url": canonical,
         "title": domain or body.url[:60], "source": body.source, "thumbnail": None,
         "summary": "", "category": "Other", "tags": [], "note": body.text[:500],
         "reminder_id": None, "related_subscription": None, "archived": False,
         "enrichment": "pending", "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.saved_links.insert_one(dict(base_link))
+    if body.reminder_date:
+        await _upsert_link_reminder(lid, body.reminder_date, body.reminder_time,
+                                    body.reminder_title or "Review saved link")
 
     # 2. Enrich (best effort)
     meta = await _fetch_metadata(body.url)
@@ -516,6 +597,8 @@ async def inbox_action(item_id: str, body: InboxAction):
     item = await db.smart_inbox.find_one({"id": item_id, "user_id": USER_ID})
     if not item:
         raise HTTPException(404, "Inbox item not found")
+    if item.get("status") in ("added", "merged", "saved", "ignored", "auto_added"):
+        raise HTTPException(409, "This inbox item was already processed")
     ex = dict(item.get("extraction", {}))
     if body.edits:
         ex.update(body.edits)
@@ -525,12 +608,21 @@ async def inbox_action(item_id: str, body: InboxAction):
         return {"ok": True, "status": "ignored"}
 
     if body.action == "merge" and body.merge_into:
+        target = await db.subscriptions.find_one({"id": body.merge_into, "user_id": USER_ID, "deleted_at": None})
+        if not target:
+            raise HTTPException(404, "Merge target not found")
+        if normalized_name(ex.get("provider")) != normalized_name(target.get("provider")):
+            raise HTTPException(409, "Provider mismatch; cannot merge")
+        source_email = normalized_email(ex.get("account_email"))
+        target_email = normalized_email(target.get("account_email"))
+        if source_email and target_email and source_email != target_email:
+            raise HTTPException(409, "Different account emails; cannot merge")
         upd = {k: v for k, v in {
             "price": ex.get("price"), "renewal_date": ex.get("renewal_date"),
             "trial_end": ex.get("trial_end"), "plan": ex.get("plan"),
         }.items() if v}
         upd["updated_at"] = now_iso()
-        await db.subscriptions.update_one({"id": body.merge_into, "user_id": USER_ID}, {"$set": upd})
+        await db.subscriptions.update_one({"id": body.merge_into, "user_id": USER_ID, "deleted_at": None}, {"$set": upd})
         await db.smart_inbox.update_one({"id": item_id}, {"$set": {"status": "merged"}})
         return {"ok": True, "status": "merged", "subscription_id": body.merge_into}
 
@@ -553,6 +645,84 @@ async def inbox_action(item_id: str, body: InboxAction):
     await db.smart_inbox.update_one({"id": item_id}, {"$set": {"status": "added", "created_ref": ref, "created_type": rtype}})
     return {"ok": True, "status": "added", "ref": ref, "type": rtype}
 
+
+
+# ---------------------------------------------------------------------------
+# Smart Vault: reusable accounts, emails, duplicates and dashboard
+# ---------------------------------------------------------------------------
+
+@api.get("/accounts")
+async def list_accounts():
+    accounts = [clean(a) for a in await db.accounts.find(await base_query()).sort("created_at", -1).to_list(1000)]
+    subscriptions = await db.subscriptions.find(await base_query()).to_list(1000)
+    for a in accounts:
+        linked = [s for s in subscriptions if s.get("account_id") == a["id"] or
+                  (normalized_name(s.get("provider")) == normalized_name(a.get("provider"))
+                   and normalized_email(s.get("account_email")) == a.get("email") and a.get("email"))]
+        a["active_plans"] = sum(s.get("status") in ("Active", "Trial") for s in linked)
+        a["plans"] = [{"id": s["id"], "plan": s.get("plan"), "status": s.get("status")} for s in linked]
+    return accounts
+
+
+@api.post("/accounts")
+async def create_account(body: Dict[str, Any]):
+    provider = str(body.get("provider") or "").strip()
+    email = normalized_email(body.get("email"))
+    if not provider or not email:
+        raise HTTPException(422, "Provider and valid account email required")
+    key = account_identity(provider, email)
+    found = await db.accounts.find_one({"user_id": USER_ID, "identity_key": key, "deleted_at": None})
+    if found:
+        raise HTTPException(409, detail={"message": "Account already exists", "existing_id": found["id"]})
+    doc = {"id": str(uuid.uuid4()), "user_id": USER_ID, "deleted_at": None,
+           "provider": provider, "email": email, "identity_key": key,
+           "display_name": str(body.get("display_name") or ""), "login_url": str(body.get("login_url") or ""),
+           "notes": str(body.get("notes") or ""), "tags": body.get("tags") or [],
+           "status": "Active", "created_at": now_iso(), "updated_at": now_iso()}
+    await db.accounts.insert_one(dict(doc))
+    return clean(doc)
+
+
+@api.patch("/accounts/{aid}")
+async def update_account(aid: str, body: Dict[str, Any]):
+    original = await db.accounts.find_one({"id": aid, "user_id": USER_ID, "deleted_at": None})
+    if not original:
+        raise HTTPException(404, "Account not found")
+    allowed = {"display_name", "login_url", "notes", "tags", "status"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    updates["updated_at"] = now_iso()
+    await db.accounts.update_one({"id": aid, "user_id": USER_ID}, {"$set": updates})
+    return clean(await db.accounts.find_one({"id": aid, "user_id": USER_ID}))
+
+
+@api.delete("/accounts/{aid}")
+async def delete_account(aid: str):
+    await db.accounts.update_one({"id": aid, "user_id": USER_ID},
+                                 {"$set": {"deleted_at": now_iso()}})
+    return {"ok": True}
+
+
+@api.post("/subscriptions/check-duplicate")
+async def check_subscription_duplicate(body: Dict[str, Any]):
+    candidates = await db.subscriptions.find(await base_query()).to_list(1000)
+    found, kind = find_subscription_match(body, candidates)
+    return {"match": kind, "existing": {"id": found["id"], "provider": found.get("provider"),
+            "plan": found.get("plan"), "account_email": found.get("account_email")} if found else None}
+
+
+@api.get("/vault/dashboard")
+async def vault_dashboard():
+    ins = await insights()
+    accounts = await db.accounts.count_documents(await base_query())
+    links = await db.saved_links.count_documents(await base_query())
+    plans = await db.plan_watchlist.count_documents(await base_query())
+    pending = await db.smart_inbox.count_documents(await base_query({"status": {"$in": ["needs_review", "needs_confirmation", "duplicate"]}}))
+    subs = await db.subscriptions.find(await base_query()).to_list(1000)
+    return {"monthly_by_currency": ins.get("monthly_by_currency", {}),
+            "active_subscriptions": sum(s.get("status") in ("Active", "Trial") for s in subs),
+            "accounts": accounts, "links": links, "saved_plans": plans, "needs_review": pending,
+            "renewals_30d": ins.get("renewals_30d", []),
+            "trials_ending": ins.get("trials_ending", [])}
 
 # ---------------------------------------------------------------------------
 # Subscriptions CRUD
@@ -583,6 +753,8 @@ async def create_subscription(body: Dict[str, Any]):
         "id": sid, "user_id": USER_ID, "deleted_at": None,
         "provider": body.get("provider", "Unknown"), "product": body.get("product") or body.get("provider", "Unknown"),
         "plan": body.get("plan", ""), "category": body.get("category", "Other"),
+        "account_email": normalized_email(body.get("account_email")),
+        "account_id": body.get("account_id"),
         "status": body.get("status", "Active"), "price": body.get("price"),
         "currency": body.get("currency", "AED"), "billing_cycle": body.get("billing_cycle", "monthly"),
         "renewal_date": body.get("renewal_date"), "start_date": body.get("start_date"),
@@ -592,6 +764,9 @@ async def create_subscription(body: Dict[str, Any]):
         "source_image": None, "related_links": [], "tags": body.get("tags", []),
         "payments": [], "price_history": [], "created_at": now_iso(), "updated_at": now_iso(),
     }
+    existing, kind = find_subscription_match(doc, await db.subscriptions.find(await base_query()).to_list(1000))
+    if existing and kind == "exact":
+        raise HTTPException(409, detail={"message": "This account and plan already exist", "existing_id": existing["id"]})
     await db.subscriptions.insert_one(dict(doc))
     if body.get("create_reminder") and (doc["renewal_date"] or doc["trial_end"]):
         rem = _reminder_from(doc, "subscription", sid)
@@ -606,6 +781,8 @@ async def update_subscription(sid: str, body: Dict[str, Any]):
     if not doc:
         raise HTTPException(404, "Not found")
     body.pop("id", None); body.pop("_id", None); body.pop("user_id", None)
+    if "account_email" in body:
+        body["account_email"] = normalized_email(body["account_email"])
     if "price" in body and body["price"] != doc.get("price"):
         hist = doc.get("price_history", [])
         hist.append({"price": doc.get("price"), "date": now_iso()})
@@ -670,6 +847,7 @@ async def update_link(lid: str, body: Dict[str, Any]):
 
 @api.delete("/links/{lid}")
 async def delete_link(lid: str):
+    await db.reminders.update_many({"ref_type": "link", "ref_id": lid, "user_id": USER_ID, "deleted_at": None}, {"$set": {"deleted_at": now_iso()}})
     await db.saved_links.update_one({"id": lid, "user_id": USER_ID}, {"$set": {"deleted_at": now_iso()}})
     return {"ok": True}
 
@@ -753,6 +931,8 @@ async def create_reminder(body: Dict[str, Any]):
         "completed": False, "created_at": now_iso(),
     }
     await db.reminders.insert_one(dict(doc))
+    if doc["ref_type"] == "link" and doc["ref_id"]:
+        await db.saved_links.update_one({"id": doc["ref_id"], "user_id": USER_ID}, {"$set": {"reminder_id": rid}})
     return clean(doc)
 
 
@@ -767,6 +947,7 @@ async def update_reminder(rid: str, body: Dict[str, Any]):
 @api.delete("/reminders/{rid}")
 async def delete_reminder(rid: str):
     await db.reminders.update_one({"id": rid, "user_id": USER_ID}, {"$set": {"deleted_at": now_iso()}})
+    await db.saved_links.update_many({"reminder_id": rid, "user_id": USER_ID}, {"$set": {"reminder_id": None}})
     return {"ok": True}
 
 
@@ -791,7 +972,8 @@ async def insights():
     subs = await db.subscriptions.find(await base_query()).to_list(500)
     subs = [clean(s) for s in subs]
     active = [s for s in subs if s.get("status") in ("Active", "Trial")]
-    monthly = round(sum(_monthly_cost(s) for s in active), 2)
+    by_currency = spend_by_currency(active)
+    monthly = round(by_currency.get(settings["currency"], 0), 2)
     yearly = round(monthly * 12, 2)
 
     today = datetime.now(timezone.utc).date()
@@ -836,7 +1018,7 @@ async def insights():
 
     watch = await db.plan_watchlist.find(await base_query()).to_list(200)
     return {
-        "currency": settings["currency"],
+        "currency": settings["currency"], "monthly_by_currency": by_currency,
         "monthly_spend": monthly, "yearly_spend": yearly,
         "active_count": len(active), "total_count": len(subs),
         "renewals_30d": renewals, "trials_ending": trials,
@@ -997,6 +1179,148 @@ async def ai_compare_endpoint(body: CompareBody):
     result = await ai_compare(plans)
     return {"comparison": result, "items": plans}
 
+
+
+# ---------------------------------------------------------------------------
+# Deals & Pricing Intelligence
+# Public web results are evidence candidates, never verified discounts.
+# ---------------------------------------------------------------------------
+DEALS_CACHE_SECONDS = 900
+
+
+@api.get("/deals/search")
+async def deals_search(q: str = "", mode: str = "all", refresh: bool = False):
+    term = re.sub(r"\s+", " ", q).strip()
+    if len(term) < 2 or len(term) > 90:
+        raise HTTPException(422, "Search must contain 2-90 characters")
+    if mode not in ("all", "plans", "offers"):
+        raise HTTPException(422, "Unknown search mode")
+    cache_key = f"{term.casefold()}|{mode}"
+    now = datetime.now(timezone.utc)
+    cached = await db.deals_cache.find_one({"key": cache_key, "user_id": USER_ID})
+    if cached and not refresh:
+        checked = cached.get("fetched_at")
+        try:
+            age = (now - datetime.fromisoformat(checked)).total_seconds()
+        except (ValueError, TypeError):
+            age = DEALS_CACHE_SECONDS + 1
+        if age < DEALS_CACHE_SECONDS:
+            return {"query": term, "items": cached.get("items", []),
+                    "cached": True, "checked_at": checked, "search_enabled": True}
+    key = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
+    if not key:
+        return {"query": term, "items": cached.get("items", []) if cached else [],
+                "cached": bool(cached), "checked_at": cached.get("fetched_at") if cached else None,
+                "search_enabled": False, "message": "Add BRAVE_SEARCH_API_KEY on the backend for live web results."}
+    try:
+        rows = await search_deals(key, term, mode)
+    except Exception:
+        logger.warning("Live plan search unavailable", exc_info=True)
+        if cached:
+            return {"query": term, "items": cached.get("items", []), "cached": True,
+                    "checked_at": cached.get("fetched_at"), "search_enabled": True,
+                    "message": "Showing older results because live search is unavailable."}
+        raise HTTPException(503, "Live price search temporarily unavailable")
+    stamp = now.isoformat()
+    await db.deals_cache.update_one({"key": cache_key, "user_id": USER_ID},
+                                    {"$set": {"items": rows, "fetched_at": stamp}},
+                                    upsert=True)
+    return {"query": term, "items": rows, "cached": False, "checked_at": stamp,
+            "search_enabled": True, "message": "Prices and promo codes are unverified search snippets, not checkout-confirmed offers."}
+
+
+@api.post("/deals/inspect")
+async def deals_inspect(body: Dict[str, Any]):
+    url = str(body.get("url") or "").strip()
+    if len(url) > 2000:
+        raise HTTPException(422, "URL too long")
+    try:
+        canonical, content = await safe_fetch_page(url)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    except Exception:
+        raise HTTPException(503, "Offer page unavailable")
+    return {"url": canonical, "prices": find_prices(content),
+            "codes": find_codes(content), "excerpt": content[:1000],
+            "checked_at": now_iso(), "verified": False}
+
+
+@api.get("/deals/codes")
+async def deals_codes():
+    rows = [clean(d) for d in await db.promo_codes.find(await base_query()).sort("created_at", -1).to_list(250)]
+    return rows
+
+
+@api.post("/deals/codes")
+async def deals_save_code(body: Dict[str, Any]):
+    code = re.sub(r"\s+", "", str(body.get("code") or "")).upper()
+    provider = str(body.get("provider") or "").strip()[:120]
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9_-]{3,24}", code) or not provider:
+        raise HTTPException(422, "Provider and valid promo code required")
+    source_url = str(body.get("source_url") or "").strip()
+    if source_url:
+        try:
+            source_url = canonicalize_url(source_url)
+        except (ValueError, OverflowError):
+            raise HTTPException(422, "Invalid source link")
+    identity = f"{normalized_name(provider)}|{code}|{normalized_email(body.get('account_email'))}"
+    existing = await db.promo_codes.find_one(await base_query({"identity": identity}))
+    if existing:
+        return {"duplicate": True, "item": clean(existing)}
+    item = {"id": str(uuid.uuid4()), "user_id": USER_ID, "deleted_at": None,
+            "identity": identity, "provider": provider, "code": code,
+            "account_email": normalized_email(body.get("account_email")),
+            "source_url": source_url, "source": str(body.get("source") or "manual")[:40],
+            "discount_text": str(body.get("discount_text") or "")[:120],
+            "expires_at": body.get("expires_at"),
+            "verified": False, "status": "unverified", "created_at": now_iso()}
+    await db.promo_codes.insert_one(dict(item))
+    return {"duplicate": False, "item": clean(item)}
+
+
+@api.get("/deals/price-history")
+async def deals_price_history(provider: str = ""):
+    term = provider.strip().casefold()
+    query = await base_query()
+    if term:
+        query["provider"] = {"$regex": re.escape(term), "$options": "i"}
+    items = [clean(d) for d in await db.price_snapshots.find(query).sort("checked_at", -1).to_list(200)]
+    return items
+
+
+@api.post("/deals/track-price")
+async def deals_track_price(body: Dict[str, Any]):
+    provider = str(body.get("provider") or "").strip()[:120]
+    url = str(body.get("url") or "")
+    if not provider or not url:
+        raise HTTPException(422, "Provider and plan URL required")
+    try:
+        canonical = canonicalize_url(url)
+    except (ValueError, OverflowError):
+        raise HTTPException(422, "Invalid plan URL")
+    amount = body.get("amount")
+    try:
+        amount = float(amount)
+    except (ValueError, TypeError):
+        raise HTTPException(422, "A confirmed numeric amount is required")
+    if not 0 < amount < 1_000_000:
+        raise HTTPException(422, "Invalid amount")
+    currency = str(body.get("currency") or "").upper()
+    if currency not in ("AED", "USD", "EUR", "GBP", "INR", "SAR"):
+        raise HTTPException(422, "Unsupported currency")
+    record = {"id": str(uuid.uuid4()), "user_id": USER_ID, "deleted_at": None,
+              "provider": provider, "plan": str(body.get("plan") or "")[:120],
+              "url": canonical, "amount": amount, "currency": currency,
+              "billing_cycle": str(body.get("billing_cycle") or "unknown"),
+              "checked_at": now_iso(), "source": str(body.get("source") or "manual"),
+              "verification": "user-confirmed"}
+    previous = await db.price_snapshots.find_one(await base_query({"url": canonical, "currency": currency}),
+                                                   sort=[("checked_at", -1)])
+    if previous and previous.get("amount") == amount and previous.get("billing_cycle") == record["billing_cycle"]:
+        return {"duplicate": True, "record": clean(previous), "change": 0}
+    await db.price_snapshots.insert_one(dict(record))
+    return {"duplicate": False, "record": clean(record),
+            "change": round(amount - previous["amount"], 2) if previous else None}
 
 # ---------------------------------------------------------------------------
 # Settings

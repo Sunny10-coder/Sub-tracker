@@ -1,0 +1,67 @@
+name: Build SubMind 2.5 Three-Gmail Brain Map APK
+
+on:
+  pull_request:
+    branches:
+      - feature/submind-smart-vault-20261030
+    paths:
+      - '.github/workflows/submind-v23-android-apk.yml'
+  workflow_dispatch:
+
+# One-off Android APK artifact build for the merged SubMind 2.5 update.
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+      EXPO_PUBLIC_BACKEND_URL: ''
+    steps:
+      - name: Checkout SubMind 2.5
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Enable Yarn classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install dependencies
+        run: yarn install --non-interactive --no-lockfile
+      - name: TypeScript check
+        run: npx tsc --noEmit --pretty false
+      - name: Generate Android native project
+        run: npx expo prebuild --platform android --no-install --non-interactive
+      - name: Compile APK for device testing
+        env:
+          NODE_OPTIONS: '--max-old-space-size=6144'
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+      - name: Inspect APK signing certificate
+        run: |
+          if test -f android/app/build/outputs/apk/release/app-release.apk; then
+            $ANDROID_HOME/build-tools/35.0.0/apksigner verify --print-certs android/app/build/outputs/apk/release/app-release.apk || true
+          else
+            echo "APK filename may vary"
+          fi
+      - name: Upload SubMind 2.5 Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubMind-v2.5-ThreeGmail-BrainMap-APK
+          path: frontend/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 7

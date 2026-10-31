@@ -44,6 +44,7 @@ export default function SubscriptionDetail() {
           <Meta label="Renewal" value={s.renewal_date ? `${formatDate(s.renewal_date)} · ${relativeDate(s.renewal_date)}` : "—"} />
           {s.trial_end ? <Meta label="Trial ends" value={`${formatDate(s.trial_end)} · ${relativeDate(s.trial_end)}`} /> : null}
           <Meta label="Category" value={s.category} />
+          <Meta label="Account email" value={s.account_email || "Not linked"} />
           <Meta label="Auto-renew" value={s.auto_renew ? "On" : "Off"} />
           {s.source ? <Meta label="Source" value={s.source} /> : null}
         </View>
