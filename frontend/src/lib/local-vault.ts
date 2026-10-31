@@ -284,8 +284,8 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
             v.subscriptions.unshift(sub);subscriptionsAdded++;saved=true;
           }
           if(!v.accounts.some(a=>normalized(a.provider)===normalized(provider)&&string(a.email)===email)){
-            v.accounts.unshift(normalizeAccount({id:"acct-"+uid(),provider,email,status:"Created",
-              source:"gmail",status:"Discovered",created_at:nowIso()}));
+            v.accounts.unshift(normalizeAccount({id:"acct-"+uid(),provider,email,status:"Discovered",
+              source:"gmail",created_at:nowIso()}));
             accountsAdded++;
           }
         }else if(incoming.type==="promo"){
