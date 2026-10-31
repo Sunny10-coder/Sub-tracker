@@ -1,4 +1,5 @@
 name: Verify SubMind Gmail 3-accounts and Brain Map AI
+# One-off pull request validation after draft PR creation.
 
 on:
   pull_request:
