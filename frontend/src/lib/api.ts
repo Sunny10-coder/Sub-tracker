@@ -118,7 +118,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["promo-codes", "promo-sources", "promo-findings", "prompts", "mailboxes", "review-queue", "price-history", "vault-dashboard", "accounts", "insights", "subscriptions", "inbox", "links", "watchlist", "reminders", "link-reminder", "graph"].forEach((k) =>
+    ["promo-codes", "promo-sources", "promo-findings", "prompts", "mailboxes", "review-queue", "price-history", "vault-dashboard", "accounts", "insights", "subscriptions", "subscription", "inbox", "links", "link", "watchlist", "plan", "reminders", "link-reminder", "graph"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }
