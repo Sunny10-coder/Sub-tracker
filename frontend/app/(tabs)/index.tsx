@@ -25,6 +25,14 @@ const SMALL_TILES = [
   { icon: "link-variant", label: "paste link", href: "/paste-link", key: "accentPink" },
   { icon: "email-plus-outline", label: "paste email", href: "/add-email", key: "accentYellow" },
   { icon: "cog", label: "settings", href: "/settings", key: "accentBlue" },
+  { icon: "gmail", label: "gmail sync", href: "/gmail-sync", key: "accentPurple" },
+  { icon: "key-variant", label: "ai models", href: "/api-keys", key: "accentBlue" },
+  { icon: "account-multiple-outline", label: "accounts", href: "/accounts", key: "accentGreen" },
+  { icon: "tag-multiple", label: "offers", href: "/promo-vault", key: "accentOrange" },
+  { icon: "text-box-multiple", label: "prompts", href: "/prompt-vault", key: "accentPink" },
+  { icon: "inbox-arrow-down", label: "review mail", href: "/mail-review", key: "accentRed" },
+  { icon: "file-import", label: "import", href: "/import-data", key: "accentYellow" },
+  { icon: "database-export", label: "backup", href: "/export-data", key: "accentBlue" },
 ] as const;
 
 function greeting() {
