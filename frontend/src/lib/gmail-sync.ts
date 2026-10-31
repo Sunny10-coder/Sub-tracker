@@ -25,7 +25,13 @@ export type MailCandidate = {
 };
 export async function getConnectedGmail(): Promise<string | null> {
   configure();
-  const user = GoogleSignin.getCurrentUser();
+  let user = GoogleSignin.getCurrentUser();
+  if (!user && GoogleSignin.hasPreviousSignIn()) {
+    try {
+      const restored = await GoogleSignin.signInSilently();
+      if (isSuccessResponse(restored)) user = restored.data;
+    } catch { return null; }
+  }
   return String(user?.user?.email || "").toLowerCase() || null;
 }
 export async function connectGmail(forceChooser = false): Promise<string> {
