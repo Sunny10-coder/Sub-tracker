@@ -59,7 +59,20 @@
           "cameraPermission": "Scan subscription screenshots and receipts"
         }
       ],
-      "@react-native-vector-icons/material-design-icons"
+      "@react-native-vector-icons/material-design-icons",
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-sharing",
+        {
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": [
+              "text/plain"
+            ],
+            "multipleShareMimeTypes": []
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
