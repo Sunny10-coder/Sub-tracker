@@ -6,6 +6,7 @@ import { METRO, MetroBrand, MetroTile } from "@/src/components/metro-tiles";
 import { Icon } from "@/src/components/ui";
 import { api, useInvalidateAll, useMailboxes, useReviewQueue } from "@/src/lib/api";
 import { connectGmail, disconnectGmail, getConnectedGmail, scanConnectedGmail } from "@/src/lib/gmail-sync";
+import type { MailType } from "@/src/lib/gmail-classifier";
 
 export default function GmailSync() {
   const router = useRouter();const insets = useSafeAreaInsets();
