@@ -1,5 +1,5 @@
 name: Verify SubMind Gmail 3-accounts and Brain Map AI
-# One-off pull request validation after draft PR creation.
+# One-off rerun after strict TypeScript repairs and expiry handling.
 
 on:
   pull_request:
