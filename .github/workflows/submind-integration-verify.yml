@@ -1,4 +1,4 @@
-name: SubMind 2.6 One-Time Integration Verification
+name: SubMind 2.6 Integration Verification (rerun 2)
 
 # One-shot: only creation/edits of this workflow trigger it on the integration
 # branch. Subsequent app edits do not produce automatic GitHub billing.
@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     permissions:
-      contents: read
+      contents: write
     env:
       CI: "1"
       EXPO_NO_TELEMETRY: "1"
@@ -38,6 +38,21 @@ jobs:
         run: npm install --global yarn@1.22.22
       - name: Restore dependencies without modifying committed lockfile
         run: yarn install --ignore-scripts --ignore-engines --non-interactive
+      - name: Commit resolved Yarn lockfile to integration branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add yarn.lock
+          if ! git diff --cached --quiet; then
+            git commit -m "Lock native Gmail and backup dependencies for reproducible Android builds"
+            git push origin HEAD:integration/claude-submind-capabilities-20261031
+          fi
+      - name: Upload lock even if subsequent tests fail
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubMind-resolved-Yarn-Lock
+          path: frontend/yarn.lock
+          if-no-files-found: error
       - name: TypeScript check
         run: npx tsc --noEmit -p .
       - name: Bundle app for Android
