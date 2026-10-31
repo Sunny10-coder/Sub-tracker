@@ -7,7 +7,7 @@ import * as direct from "@/src/lib/direct-providers";
 async function req<T>(path:string,opts?:RequestInit):Promise<T>{
  if(path.startsWith("/deals/search")){const q=new URLSearchParams(path.split("?")[1]||"");return direct.deals(q.get("q")||"") as T}
  if(path==="/ai/chat"){const question=JSON.parse(String(opts?.body||"{}")).question;const vault=await getVault();
- const context="You are SubMind. Answer strictly from provided user records when discussing account status, renewals or spending. If unknown say unknown. Do not assume prices or billing. Private data:\n"+JSON.stringify({subscriptions:vault.subscriptions.slice(0,250),accounts:vault.accounts.slice(0,150),benefits:vault.benefits.slice(0,100)}).slice(0,24000);
+ const context="You are SubMind. Answer from user records, never invent renewals or verified coupons. Unknown status means unknown. Private data:\n"+JSON.stringify({subscriptions:vault.subscriptions.slice(0,160),accounts:vault.accounts.slice(0,100),benefits:vault.benefits.slice(0,60),links:vault.links.slice(0,80).map((l:any)=>({title:l.title,url:l.url,category:l.category,tags:l.tags})),promos:vault.promo_codes.slice(0,60),prompts:vault.prompts.slice(0,60).map((p:any)=>({title:p.title,category:p.category,tags:p.tags}))}).slice(0,32000);
  return direct.chat(question,context) as T}
  if(path==="/ai/chat/history")return [] as T;
  return localRequest<T>(path,opts);
