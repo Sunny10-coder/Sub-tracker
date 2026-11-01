@@ -10,7 +10,7 @@ const MAP_KEY = "notif_map_v1";
 const CHANNEL = "reminders";
 const NOTIFY_HOUR = 9;
 
-type Reminder = { id: string; title: string; due_date?: string | null; completed?: boolean; kind?:string; ref_id?:string };
+type Reminder = { id: string; title: string; due_date?: string | null; completed?: boolean; remind_time?:string; kind?:string; ref_id?:string };
 type NotifMap = Record<string, { key: string; nid: string }>;
 
 let handlerSet = false;
@@ -56,10 +56,11 @@ export async function syncReminderNotifications(reminders: Reminder[]): Promise<
 
     for (const r of reminders) {
       if (r.completed || !r.due_date) continue;
-      const when = new Date(`${String(r.due_date).slice(0, 10)}T${String(NOTIFY_HOUR).padStart(2, "0")}:00:00`);
+      const clock=/^([01]\\d|2[0-3]):[0-5]\\d$/.test(String(r.remind_time||""))?String(r.remind_time):`${String(NOTIFY_HOUR).padStart(2,"0")}:00`;
+      const when = new Date(`${String(r.due_date).slice(0,10)}T${clock}:00`);
       if (Number.isNaN(when.getTime()) || when.getTime() <= now) continue;
       live.add(r.id);
-      const key = `${r.title}|${r.due_date}`;
+      const key = `${r.title}|${r.due_date}|${clock}`;
       if (map[r.id]?.key === key) continue;   // already scheduled for this title and date
       if (map[r.id]) await Notifications.cancelScheduledNotificationAsync(map[r.id].nid);
       const nid = await Notifications.scheduleNotificationAsync({
