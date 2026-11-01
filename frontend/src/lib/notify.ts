@@ -56,7 +56,7 @@ export async function syncReminderNotifications(reminders: Reminder[]): Promise<
 
     for (const r of reminders) {
       if (r.completed || !r.due_date) continue;
-      const clock=/^([01]\\d|2[0-3]):[0-5]\\d$/.test(String(r.remind_time||""))?String(r.remind_time):`${String(NOTIFY_HOUR).padStart(2,"0")}:00`;
+      const clock=/^([01]\d|2[0-3]):[0-5]\d$/.test(String(r.remind_time||""))?String(r.remind_time):`${String(NOTIFY_HOUR).padStart(2,"0")}:00`;
       const when = new Date(`${String(r.due_date).slice(0,10)}T${clock}:00`);
       if (Number.isNaN(when.getTime()) || when.getTime() <= now) continue;
       live.add(r.id);
