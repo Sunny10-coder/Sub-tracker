@@ -1126,7 +1126,7 @@ async def create_reminder(body: Dict[str, Any]):
     doc = {
         "id": rid, "user_id": USER_ID, "deleted_at": None,
         "title": body.get("title", "Reminder"), "kind": body.get("kind", "custom"),
-        "due_date": body.get("due_date"), "ref_type": body.get("ref_type", "custom"),
+        "due_date": body.get("due_date"), "remind_time": body.get("remind_time", "09:00"), "ref_type": body.get("ref_type", "custom"),
         "ref_id": body.get("ref_id"), "recurring": body.get("recurring"),
         "completed": False, "created_at": now_iso(),
     }
@@ -1137,6 +1137,8 @@ async def create_reminder(body: Dict[str, Any]):
 @api.patch("/reminders/{rid}")
 async def update_reminder(rid: str, body: Dict[str, Any]):
     body.pop("id", None); body.pop("_id", None)
+    if "remind_time" in body and not re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d",str(body["remind_time"])):
+        raise HTTPException(422,"Time must use HH:MM")
     await db.reminders.update_one({"id": rid, "user_id": USER_ID}, {"$set": body})
     doc = await db.reminders.find_one({"id": rid})
     return clean(doc)
