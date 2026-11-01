@@ -43,8 +43,9 @@ export default function Reminders() {
                 <View style={styles.iconBox}><Icon name={kindIcon[item.kind] || "bell-outline"} size={18} color={colors.brandPrimary} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.title, item.completed && styles.done]} numberOfLines={2}>{item.title}</Text>
-                  <Text style={[styles.date, overdue && { color: colors.error }]}>{formatDate(item.due_date)} · {relativeDate(item.due_date)}</Text>
+                  <Text style={[styles.date, overdue && { color: colors.error }]}>{formatDate(item.due_date)} · {item.remind_time||"09:00"} · {relativeDate(item.due_date)}</Text>
                 </View>
+                <Pressable onPress={() => router.push({pathname:"/edit-reminder",params:{id:item.id}} as never)} hitSlop={10}><Icon name="pencil-outline" size={20} color={colors.brandPrimary} /></Pressable>
                 <Pressable onPress={() => del.mutate(item.id)} hitSlop={10}><Icon name="close" size={20} color={colors.muted} /></Pressable>
               </Card>
             );
