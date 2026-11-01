@@ -259,7 +259,7 @@ export const api = {
   linkTags: () => localRequest<{ tag: string; count: number }[]>("/links/tags"),
   link: (id: string) => req<any>(`/links/${id}`),
   linkOpened: (id: string) => req<any>(`/links/${id}/opened`, { method: "POST" }),
-  linkRemind: (id: string, b: { days?: number; date?: string; title?: string }) =>
+  linkRemind: (id: string, b: { days?: number; date?: string; title?: string; remind_time?:string }) =>
     req<any>(`/links/${id}/remind`, { method: "POST", body: JSON.stringify(b) }),
   updateLink: (id: string, b: any) => req<any>(`/links/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   deleteLink: (id: string) => req<any>(`/links/${id}`, { method: "DELETE" }),

@@ -28,6 +28,7 @@ export default function LinkDetail() {
   const { data, isLoading, refetch } = useLink(id!);
   const invalidate = useInvalidateAll();
   const [newTags, setNewTags] = useState("");
+  const [reminderTime,setReminderTime]=useState("09:00");
   const allLinks=useLinks();
 
 
@@ -37,7 +38,7 @@ export default function LinkDetail() {
   const patch = useMutation({ mutationFn: (b: Record<string, unknown>) => api.updateLink(id!, b), onSuccess: refresh });
   const watch=useMutation({mutationFn:(enabled:boolean)=>api.smartWatchRepo(id!,enabled),onSuccess:refresh});
   const remind = useMutation({
-    mutationFn: (days: number) => api.linkRemind(id!, { days }),
+    mutationFn: (days: number) => api.linkRemind(id!, { days,remind_time:reminderTime }),
     onSuccess: refresh,
   });
 
@@ -131,9 +132,11 @@ export default function LinkDetail() {
         <View>
           <SectionLabel>remind me</SectionLabel>
           {l.reminder_due ? <Text style={styles.fine}>Reminder set for {formatDate(l.reminder_due)} ({relativeDate(l.reminder_due)}). Pick a new time to move it.</Text> : null}
+          <TextInput value={reminderTime} onChangeText={setReminderTime} keyboardType="numbers-and-punctuation"
+            style={styles.input} placeholder="Reminder time HH:MM" placeholderTextColor={colors.muted} testID="link-reminder-time"/>
           <View style={{ marginHorizontal: -16, marginTop: 6 }}>
             <ChipRow items={REMIND_PRESETS.filter((p) => p.days !== null).map((p) => p.label)} value={null} testIDPrefix="remind"
-              onChange={(label: string) => { const d = REMIND_PRESETS.find((p) => p.label === label)?.days; if (d) remind.mutate(d); }} />
+              onChange={(label: string) => { const d = REMIND_PRESETS.find((p) => p.label === label)?.days; if (d && /^([01]\d|2[0-3]):[0-5]\d$/.test(reminderTime)) remind.mutate(d); }} />
           </View>
         </View>
 

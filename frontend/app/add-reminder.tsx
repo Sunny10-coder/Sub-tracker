@@ -10,7 +10,8 @@ import { AppHeader, PrimaryButton } from "@/src/components/ui";
 import { FormScroll, TextField } from "@/src/components/form";
 import { makeStyles, useTheme } from "@/src/theme";
 
-function iso(d: Date) { return d.toISOString().slice(0, 10); }
+function iso(d:Date){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");}
+const timeValid=(v:string)=>/^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 
 const PRESETS = [
   { label: "Tomorrow", days: 1 },
@@ -30,13 +31,17 @@ export default function AddReminder() {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(iso(new Date(Date.now() + 86400000)));
   const [preset, setPreset] = useState("Tomorrow");
+  const [time,setTime]=useState("09:00");
+  const [error,setError]=useState("");
 
   const pick = (p: any) => { setPreset(p.label); setDate(iso(new Date(Date.now() + p.days * 86400000))); };
 
   const save = useMutation({
     mutationFn: async () => {
       // The notification itself is scheduled by the app-wide reminder sync once this is saved.
-      return api.createReminder({ title, due_date: date, kind: "custom" });
+      const when=new Date(date+"T"+time+":00");
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!timeValid(time)||Number.isNaN(when.getTime())||when.getTime()<=Date.now())throw Error("Choose a future date and time (24-hour format).");
+      return api.createReminder({ title:title.trim(), due_date:date,remind_time:time,kind:"custom" });
     },
     onSuccess: () => { invalidate(); router.replace("/reminders"); },
   });
@@ -55,10 +60,15 @@ export default function AddReminder() {
           ))}
         </View>
         <TextField label="Date" value={date} onChangeText={(v: string) => { setDate(v); setPreset(""); }} placeholder="YYYY-MM-DD" testID="rem-date" />
+        <Text style={styles.label}>Time (local, 24-hour)</Text>
+        <View style={styles.presets}>{["08:00","09:00","12:00","18:00","21:00"].map(t=><Pressable key={t} onPress={()=>setTime(t)} style={[styles.preset,time===t&&{backgroundColor:colors.brandPrimary}]}><Text style={[styles.presetText,time===t&&{color:colors.onBrandPrimary}]}>{t}</Text></Pressable>)}</View>
+        <TextField label="Custom time (HH:MM)" value={time} onChangeText={setTime} placeholder="18:30" testID="rem-time" />
+        <Text style={styles.presetText}>Notifications follow your phone’s local time. The previous 9:00 AM default remains for older reminders.</Text>
+        {save.isError?<Text style={{color:colors.error,fontSize:12}}>{(save.error as Error).message}</Text>:null}
       </FormScroll>
       <KeyboardStickyView>
         <View style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
-          <PrimaryButton title="Set reminder" icon="bell-plus" onPress={() => save.mutate()} loading={save.isPending} disabled={!title.trim()} testID="rem-save" />
+          <PrimaryButton title="Set reminder" icon="bell-plus" onPress={() => save.mutate()} loading={save.isPending} disabled={!title.trim()||!timeValid(time)} testID="rem-save" />
         </View>
       </KeyboardStickyView>
     </View>
