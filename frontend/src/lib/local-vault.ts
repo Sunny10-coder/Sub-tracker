@@ -619,7 +619,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
         const d=new Date();d.setDate(d.getDate()+Math.min(3650,n));date=d.toISOString().slice(0,10);}
       let r=v.reminders.find(x=>x.ref_type==="link"&&x.ref_id===id&&!x.completed);
       if(!r){r={id:"rem-"+uid(),ref_type:"link",ref_id:id,completed:false,created_at:nowIso()};v.reminders.unshift(r);}
-      Object.assign(r,{title:string(data.title)||"Review saved link",due_date:date,remind_time:"09:00"});
+      Object.assign(r,{title:string(data.title)||"Review saved link",due_date:date,remind_time:string(data.remind_time)||"09:00"});
       link.reminder_due=date;link.reminder_id=r.id;result=r;
    }else if(route.startsWith("/links/")&&method==="DELETE"){
       v.links=v.links.filter(l=>l.id!==route.split("/")[2]);result={ok:true};
