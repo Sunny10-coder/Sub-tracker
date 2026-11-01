@@ -11,7 +11,7 @@ import { FormScroll, TextField } from "@/src/components/form";
 import { makeStyles, useTheme } from "@/src/theme";
 
 function iso(d:Date){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");}
-const timeValid=(v:string)=>/^([01]\\d|2[0-3]):[0-5]\\d$/.test(v);
+const timeValid=(v:string)=>/^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 
 const PRESETS = [
   { label: "Tomorrow", days: 1 },
@@ -40,7 +40,7 @@ export default function AddReminder() {
     mutationFn: async () => {
       // The notification itself is scheduled by the app-wide reminder sync once this is saved.
       const when=new Date(date+"T"+time+":00");
-      if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!timeValid(time)||Number.isNaN(when.getTime())||when.getTime()<=Date.now())throw Error("Choose a future date and time (24-hour format).");
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!timeValid(time)||Number.isNaN(when.getTime())||when.getTime()<=Date.now())throw Error("Choose a future date and time (24-hour format).");
       return api.createReminder({ title:title.trim(), due_date:date,remind_time:time,kind:"custom" });
     },
     onSuccess: () => { invalidate(); router.replace("/reminders"); },
