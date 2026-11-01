@@ -514,6 +514,7 @@ class LinkRemind(BaseModel):
     days: Optional[int] = None
     date: Optional[str] = None
     title: Optional[str] = None
+    remind_time: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -652,11 +653,11 @@ def _remind_date(days: Optional[int], at: Optional[str]) -> Optional[str]:
     return None
 
 
-async def _add_link_reminder(lid: str, title: str, due: str) -> str:
+async def _add_link_reminder(lid: str, title: str, due: str, remind_time: str = "09:00") -> str:
     rid = str(uuid.uuid4())
     await db.reminders.insert_one({
         "id": rid, "user_id": USER_ID, "deleted_at": None, "title": f"Revisit: {title[:80]}",
-        "kind": "link", "due_date": due, "ref_type": "link", "ref_id": lid,
+        "kind": "link", "due_date": due, "remind_time": remind_time, "ref_type": "link", "ref_id": lid,
         "recurring": None, "completed": False, "created_at": now_iso(),
     })
     await db.saved_links.update_one({"id": lid}, {"$set": {"reminder_id": rid, "reminder_due": due}})
@@ -1039,8 +1040,11 @@ async def link_remind(lid: str, body: LinkRemind):
         raise HTTPException(400, "Give a number of days or a date (YYYY-MM-DD)")
     if doc.get("reminder_id"):  # one live reminder per link: replace the old one
         await db.reminders.update_one({"id": doc["reminder_id"]}, {"$set": {"deleted_at": now_iso()}})
-    rid = await _add_link_reminder(lid, body.title or doc.get("title", "link"), due)
-    return {"ok": True, "reminder_id": rid, "due_date": due}
+    time = body.remind_time or "09:00"
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d",time):
+        raise HTTPException(422,"Time must use HH:MM")
+    rid = await _add_link_reminder(lid, body.title or doc.get("title", "link"), due, time)
+    return {"ok": True, "reminder_id": rid, "due_date": due,"remind_time": time}
 
 
 @api.delete("/links/{lid}")
