@@ -1137,7 +1137,7 @@ async def create_reminder(body: Dict[str, Any]):
 @api.patch("/reminders/{rid}")
 async def update_reminder(rid: str, body: Dict[str, Any]):
     body.pop("id", None); body.pop("_id", None)
-    if "remind_time" in body and not re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d",str(body["remind_time"])):
+    if "remind_time" in body and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d",str(body["remind_time"])):
         raise HTTPException(422,"Time must use HH:MM")
     await db.reminders.update_one({"id": rid, "user_id": USER_ID}, {"$set": body})
     doc = await db.reminders.find_one({"id": rid})
