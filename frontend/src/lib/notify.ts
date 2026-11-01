@@ -19,7 +19,7 @@ function ensureHandler() {
   handlerSet = true;
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false,
+      shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false,
     }),
   });
 }
@@ -48,6 +48,7 @@ export async function syncReminderNotifications(reminders: Reminder[]): Promise<
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync(CHANNEL, {
         name: "Reminders", importance: Notifications.AndroidImportance.HIGH,
+        sound:"default",
       });
     }
     const map = await readMap();
