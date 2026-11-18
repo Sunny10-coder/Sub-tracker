@@ -64,6 +64,17 @@ export function looksLikeUrl(t?: string | null): boolean {
   return /^https?:\/\/\S+$/i.test(s) || /^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+\/\S*$/i.test(s);
 }
 
+/** Instagram/other share sheets may include text before or after the URL.
+ * Save the extracted URL; callers may preserve the remaining caption as a note. */
+export function extractSharedUrl(raw: string): string {
+  const value=String(raw||"").trim();
+  if(looksLikeUrl(value))return /^https?:\/\//i.test(value)?value:"https://"+value;
+  const match=value.match(/https?:\/\/[^\s<>"'\u201c\u201d]+/i);
+  if(!match)return "";
+  const candidate=match[0].replace(/[),;.!?]+$/g,"");
+  return looksLikeUrl(candidate)?candidate:"";
+}
+
 // Client-side twin of backend/linkintel.classify_url so the paste screen can show what it found live.
 export function detectLinkKind(url?: string | null): LinkKind {
   const m = (url || "").trim().toLowerCase().match(/^(?:[a-z]+:\/\/)?(?:www\.)?([^/?#]+)/);
