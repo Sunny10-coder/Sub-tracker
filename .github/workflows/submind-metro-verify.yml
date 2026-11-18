@@ -1,7 +1,7 @@
 name: SubMind Deadline and Inbox Fix Verification
 
 # Deliberately one-shot: ordinary code pushes do not trigger repeated CI jobs.
-# Verify final Instagram clipboard/share handling and caption enrichment.
+# Verify urgency ordering and Inbox removal regression.
 on:
   push:
     branches:
