@@ -342,18 +342,26 @@ export const api = {
     return summary;
   },
   ingestLink: async (url:string,source="share",text="",
-    extra:{tags?:string[];remind_in_days?:number}={}) => {
+    extra:{tags?:string[];remind_in_days?:number;caption_text?:string;video_transcript?:string}={}) => {
     // Never hold up saving a bookmark because an external site or AI API fails.
     const item=await req<any>("/ingest/link",{method:"POST",body:JSON.stringify({url,source,text,...extra})});
     if(item?.link_id){
       try{
-        const link=await api.link(String(item.link_id));
-        const stale=!link.analyzed_at||link.analysis_status==="needs_review";
+        const id=String(item.link_id);
+        const changedContext=!!(extra.caption_text?.trim()||extra.video_transcript?.trim());
+        if(changedContext){
+          const updates:Record<string,string>={};
+          if(extra.caption_text?.trim())updates.caption_text=extra.caption_text.trim().slice(0,5000);
+          if(extra.video_transcript?.trim())updates.video_transcript=extra.video_transcript.trim().slice(0,8000);
+          await api.updateLink(id,updates);
+        }
+        const link=await api.link(id);
+        const stale=changedContext||!link.analyzed_at||link.analysis_status==="needs_review";
         if(stale){
-          const saved=await api.analyzeLink(String(item.link_id));
+          const saved=await api.analyzeLink(id);
           return {...item,link:saved,analysis_status:saved.analysis_status};
         }
-      }catch{/* Keep the saved bookmark and its original tags. */}
+      }catch{/* Saved URL, tags, and user content are kept even when Instagram is unavailable. */}
     }
     return item;
   },
