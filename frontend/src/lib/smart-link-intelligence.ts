@@ -5,7 +5,7 @@
  * Page content is untrusted data, not executable instructions.
  */
 import { call, geminiSafeDefault, isPaidGeminiModel, key, models } from "@/src/lib/direct-providers";
-import { classifyLink, inferCategory, inferTags } from "@/src/lib/vault-intelligence";
+import { classifyLink, inferCategory, inferTags, instagramEvidenceTags, instagramPostInfo } from "@/src/lib/vault-intelligence";
 import { storage } from "@/src/utils/storage";
 
 export const SMART_LINK_AUTO_AI_KEY="submind.link.auto_ai.v1";
@@ -37,10 +37,10 @@ function visible(html:string):string{
   .replace(/<\/(?:p|div|h[1-6]|li|br|section|article)>/gi,"\n")
   .replace(/<[^>]*>/g," "))).replace(/[ \t]{2,}/g," ").replace(/\n{3,}/g,"\n\n").trim();
 }
-function getMeta(html:string,name:string):string{
+function getMeta(html:string,name:string,max=550):string{
  for(const tag of (html.match(/<meta\b[^>]*>/gi)||[]).slice(0,120)){
   const attr=(key:string)=>new RegExp("\\b"+key+"\\s*=\\s*([\"'])(.*?)\\1","i").exec(tag)?.[2]||"";
-  if([attr("name"),attr("property"),attr("itemprop")].some(x=>x.toLowerCase()===name))return clean(decode(attr("content")),550);
+  if([attr("name"),attr("property"),attr("itemprop")].some(x=>x.toLowerCase()===name))return clean(decode(attr("content")),max);
  }
  return "";
 }
@@ -76,9 +76,10 @@ async function getText(uri:string,accept:string,max=MAX_HTML):Promise<{body:stri
  }catch{return null;}finally{clearTimeout(timer);}
 }
 type Source={
- basis:"readme"|"repo_metadata"|"page_text"|"metadata"|"url_only";
+ basis:"readme"|"repo_metadata"|"page_text"|"metadata"|"url_only"|"caption"|"user_caption"|"user_transcript"|"user_note";
  title:string;description:string;excerpt:string;sources:string[];
  kind?:string;collection?:string;repo?:Record<string,any>;warning?:string;
+ extra?:Record<string,any>;thumbnail?:string|null;tags?:string[];
 };
 function fallback(record:any,warning:string):Source{
  return{basis:"url_only",title:clean(record.title,150)||"Saved link",description:"",excerpt:"",sources:[],warning};
@@ -119,6 +120,56 @@ async function github(record:any,u:URL):Promise<Source>{
   description,excerpt:readme||desc,sources:readmeUrl?[endpoint,readmeUrl]:[endpoint],
   kind:"github",collection:"GitHub",repo:metadata,
   ...(!readme?{warning:"README not readable; based on public repository metadata."}:{})};
+}
+function instagramMetaCaption(raw:string):string{
+ const d=clean(raw,2200);
+ if(!d||/^(?:log ?in|sign ?up|see instagram|instagram photos)/i.test(d))return "";
+ const wrapped=/\b(?:likes?|comments?)\b[^:]{0,240}:\s*["\u201c]([\s\S]+?)["\u201d]\s*\.?$/i.exec(d)
+   ||/\bon instagram\b[^:]{0,120}:\s*["\u201c]([\s\S]+?)["\u201d]\s*\.?$/i.exec(d);
+ if(wrapped)return clean(wrapped[1],1800);
+ if(/^\s*[\d,.]+\s+(?:likes?|comments?)/i.test(d)||/\bfollowers\b/i.test(d))return "";
+ return d;
+}
+async function instagram(record:any,u:URL):Promise<Source>{
+ const info=instagramPostInfo(u.toString());
+ const userCaption=clean(record.caption_text,5000);
+ const userTranscript=clean(record.video_transcript,8000);
+ const userNote=clean(record.note,1600);
+ const html=await getText(u.toString(),"text/html,application/xhtml+xml;q=0.9");
+ let fetchedCaption="",author="",thumbnail="",publicTitle="";
+ if(html&&html.type.includes("html")){
+   const title=pageTitle(html.body);
+   if(title&&!/^(?:instagram(?: photos and videos)?|log ?in|sign ?up|login|see instagram)/i.test(title))
+     publicTitle=title;
+   const desc=getMeta(html.body,"og:description",2200)||
+     getMeta(html.body,"description",2200)||getMeta(html.body,"twitter:description",2200);
+   fetchedCaption=instagramMetaCaption(desc);
+   thumbnail=getMeta(html.body,"og:image",1200)||getMeta(html.body,"twitter:image",1200);
+   const m=/(?:^|\s)@([a-z0-9._]{2,30})\b/i.exec(title)||
+     /\bby\s+([a-z0-9._]{2,30})\s+on instagram/i.exec(desc)||
+     /-\s*([a-z0-9._]{2,30})\s+on\s+instagram/i.exec(desc);
+   author=m?.[1]||"";
+ }
+ // User-supplied transcript has richer evidence, but never claim it was
+ // extracted from the video. If missing, use only available public caption.
+ const caption=fetchedCaption||userCaption;
+ const evidence=userTranscript||caption||userNote;
+ const basis:Source["basis"]=userTranscript?"user_transcript":fetchedCaption?"caption":
+   userCaption?"user_caption":userNote?"user_note":publicTitle?"metadata":"url_only";
+ const typeLabel=info.type==="reel"?"Reel":info.type==="post"?"Post":info.type==="story"?"Story":"Link";
+ const title=publicTitle||"Instagram "+typeLabel+(author?" by @"+author:"");
+ const details={type:info.type,shortcode:info.shortcode,author,
+   caption,caption_source:fetchedCaption?"public_metadata":userCaption?"user_supplied":"unavailable",
+   transcript_source:userTranscript?"user_supplied":"unavailable",media_analyzed:false};
+ const warning=userTranscript?"Based on your supplied transcript; the video was not independently analyzed.":
+   fetchedCaption?"Based on the public caption. Audio and video frames were not analyzed.":
+   userCaption?"Based on your supplied caption. Video and audio were not fetched.":
+   userNote?"Based on your note only; Instagram content could not be read.":
+   "Instagram did not provide readable public content. Paste its caption or transcript to describe and tag the Reel.";
+ return {basis,title,description:clean(evidence,1500),excerpt:clean(evidence,5200),
+   sources:fetchedCaption?[u.toString()]:[],kind:"instagram",collection:"Instagram",
+   tags:instagramEvidenceTags(evidence),warning,thumbnail:thumbnail||null,
+   extra:{instagram:details,...(caption?{instagram_caption:caption}:{})}};
 }
 async function webpage(record:any,u:URL):Promise<Source>{
  const host=u.hostname.toLowerCase();
@@ -183,12 +234,16 @@ export async function analyzePublicLink(record:Record<string,any>,useAI=true):Pr
  const base=classifyLink(String(record.url||""),String(record.note||""),String(record.source||"share"));
  const u=safePublicUrl(String(record.url||""));
  const source=!u?fallback(record,"Private, insecure or signed link; no page fetch."):
-   u.hostname==="github.com"?await github(record,u):await webpage(record,u);
- const evidence=[source.title,source.description,source.excerpt].filter(Boolean).join(" ");
+   u.hostname==="github.com"?await github(record,u):
+   /^(?:www\.|m\.)?instagram\.com$/.test(u.hostname)?await instagram(record,u):await webpage(record,u);
+ const evidence=source.kind==="instagram"?
+   [source.description,source.excerpt].filter(Boolean).join(" "):
+   [source.title,source.description,source.excerpt].filter(Boolean).join(" ");
  const ai=useAI?await optionalAI(source):null;
- const tags=unique([...(Array.isArray(record.tags)?record.tags:[]),...
-   inferTags(evidence||String(record.url||""),base.tags||[]),
-   ...list(ai?.tags,9).map(x=>x.toLowerCase())]).slice(0,16);
+ const tags=unique([...(Array.isArray(record.tags)?record.tags:[]),
+   ...(source.kind==="instagram"?instagramEvidenceTags(evidence):
+     inferTags(evidence||String(record.url||""),base.tags||[])),
+   ...list(source.tags,14),...list(ai?.tags,9).map(x=>x.toLowerCase())]).slice(0,16);
  const search_keywords=unique([...guessKeywords(evidence),...list(ai?.search_keywords,15)]).slice(0,40);
  const category=CATEGORIES.has(String(ai?.category))?ai!.category:
    evidence?inferCategory(evidence):base.category;
@@ -204,11 +259,14 @@ export async function analyzePublicLink(record:Record<string,any>,useAI=true):Pr
   use_cases:use_cases.length?use_cases:list(record.use_cases,3),
   key_points:key_points.length?key_points:list(record.key_points,4),
   ...(source.repo?{repo:source.repo}:{}),
+  ...(source.extra||{}),
+  ...(source.thumbnail?{thumbnail:source.thumbnail}:{}),
   content_excerpt:source.excerpt.slice(0,1700),
-  analysis_basis:source.basis,analysis_status:source.basis==="url_only"?"needs_review":"analyzed",
+  analysis_basis:source.basis,
+  analysis_status:["url_only","user_note"].includes(source.basis)?"needs_review":"analyzed",
   analysis_ai:!!ai,analysis_model:ai?.analysis_model||null,
   analysis_sources:source.sources,analysis_warning:source.warning||null,
-  review_required:source.basis==="url_only",
+  review_required:["url_only","user_note"].includes(source.basis),
   analyzed_at:new Date().toISOString(),enrichment:ai?"source-backed-ai":"source-backed-rules",
  };
 }

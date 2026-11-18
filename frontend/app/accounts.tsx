@@ -18,6 +18,9 @@ export default function Accounts() {
     return matched && (filter === "All" || filter === "Cancelled / expired" || (filter === "With plans" ? a.plans?.length > 0 : !a.plans?.length));
   }).sort((a:any,b:any) => String(a.provider).localeCompare(String(b.provider))), [data,filter,query]);
   const refresh = () => { refetch(); archive.refetch(); invalidate(); };
+  const archived = (archive.data ?? []).filter((item:any)=>
+    [item.provider,item.plan,item.product,item.account_email,item.status].join(" ").toLowerCase()
+      .includes(query.toLowerCase().trim()));
   return <View style={styles.page}>
     <AppHeader title="Accounts" subtitle={data.length + " registered services"} back
       right={<Pressable accessibilityLabel="Add account" accessibilityRole="button" onPress={()=>router.push("/add-account")}>
@@ -29,7 +32,7 @@ export default function Accounts() {
         placeholderTextColor={colors.muted} value={query} onChangeText={setQuery} testID="accounts-search"/>
     </View>
     <ChipRow items={FILTERS as unknown as string[]} value={filter} onChange={setFilter} testIDPrefix="accounts-filter"/>
-    {filter === "Cancelled / expired" ? <FlatList data={archive.data || []} keyExtractor={(i:any)=>String(i.id)}
+    {filter === "Cancelled / expired" ? <FlatList data={archived} keyExtractor={(i:any)=>String(i.id)}
        refreshControl={<RefreshControl refreshing={archive.isFetching} onRefresh={refresh} tintColor={colors.brandPrimary}/>}
        contentContainerStyle={{padding:16,gap:9,paddingBottom:insets.bottom+40}}
        ListEmptyComponent={<EmptyState icon="archive-outline" title="No cancelled plans" message="Cancelled and expired plans appear here with their original details and payment history."/>}

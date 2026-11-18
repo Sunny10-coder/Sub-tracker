@@ -52,10 +52,14 @@ const METHOD=(opts?:RequestInit)=>String(opts?.method||"GET").toUpperCase();
 const collectionRoutes=new Set(["/subscriptions","/links","/watchlist","/reminders","/inbox"]);
 const recordKey=(x:PrivateRecord,collection:string):string=>{
   const text=(v:any)=>String(v??"").toLowerCase().replace(/[^a-z0-9]/g,"");
-  if(collection==="/subscriptions")return [text(x.provider),text(x.plan),text(x.account_email),text(x.product)].join(":");
+  // Never silently collapse two independently created subscriptions just
+  // because their provider and plan names happen to match.
+  if(collection==="/subscriptions")return x.id?"id:"+String(x.id):
+    [text(x.provider),text(x.plan),text(x.account_email),text(x.product)].join(":");
   if(collection==="/links")return text(x.canonical_url||x.url);
   if(collection==="/inbox")return String(x.source_key||[x.mailbox_email,x.message_id,x.id].join(":"));
-  if(collection==="/watchlist")return [text(x.provider),text(x.plan),text(x.account_email)].join(":");
+  if(collection==="/watchlist")return x.id?"id:"+String(x.id):
+    [text(x.provider),text(x.plan),text(x.account_email)].join(":");
   return String(x.id||"");
 };
 const mergeRecords=(collection:string,local:PrivateRecord[],remote:PrivateRecord[])=>{
@@ -169,9 +173,10 @@ export const api = {
     const key=(v:any)=>String(v||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
     return accounts.map(account=>{
       const accountEmail=String(account.email||"").trim().toLowerCase();
-      const linked=accountEmail?subs.filter((sub:any)=>
-        key(sub.provider)===key(account.provider) &&
-        String(sub.account_email||"").trim().toLowerCase()===accountEmail):[];
+      const linked=subs.filter((sub:any)=>String(sub.account_id||"")===String(account.id) ||
+        (Boolean(account.source_subscription_id) && String(account.source_subscription_id)===String(sub.id)) ||
+        (!sub.account_id && !!accountEmail && key(sub.provider)===key(account.provider) &&
+        String(sub.account_email||"").trim().toLowerCase()===accountEmail));
       return {...account,plans:linked.map((sub:any)=>({id:sub.id,plan:sub.plan,status:sub.status}))};
     });
   },
@@ -182,8 +187,10 @@ export const api = {
     const record=await localRequest<any>("/accounts/"+encodeURIComponent(id));
     const plans=await api.allSubscriptionHistory().catch(()=>[]);
     const same=(x:any)=>String(x.provider||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-    return {...record,plans:plans.filter((x:any)=>Boolean(String(record.email||"").trim())&&same(x)===same(record)&&
-      String(x.account_email||"").toLowerCase()===String(record.email||"").toLowerCase())
+    return {...record,plans:plans.filter((x:any)=>String(x.account_id||"")===String(record.id) ||
+      (Boolean(record.source_subscription_id)&&String(x.id)===String(record.source_subscription_id)) ||
+      (!x.account_id && Boolean(String(record.email||"").trim())&&same(x)===same(record)&&
+      String(x.account_email||"").toLowerCase()===String(record.email||"").toLowerCase()))
       .map((x:any)=>({id:x.id,plan:x.plan,status:x.status}))};
   },
   updateAccount: (id:string,b:any) => localRequest<any>("/accounts/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify(b)}),
@@ -231,15 +238,29 @@ export const api = {
     if(!provider)throw Error("Provider is required.");
     const norm=(x:any)=>String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"");
     const existing=await api.subscriptions();
-    const match=existing.find((x:any)=>norm(x.provider)===norm(provider)&&
+    const email=String(b.account_email||"").trim().toLowerCase();
+    const match=email?existing.find((x:any)=>norm(x.provider)===norm(provider)&&
       norm(x.plan)===norm(b.plan)&&
-      String(x.account_email||"").trim().toLowerCase()===String(b.account_email||"").trim().toLowerCase());
+      String(x.account_email||"").trim().toLowerCase()===email):undefined;
     if(match)throw Error("This provider, plan and sign-in email are already saved. Open the existing subscription instead of creating a duplicate.");
     return req<any>("/subscriptions",{method:"POST",body:JSON.stringify(b)});
   },
   updateSubscription: async (id:string,b:any) => {
     const updated=await req<any>(`/subscriptions/${id}`,{method:"PATCH",body:JSON.stringify(b)});
     if(["cancelled","expired"].includes(String(b.status||"").toLowerCase())){
+      // A server-owned subscription needs a local reference so the Accounts
+      // screen remains useful even if its registration details are incomplete.
+      const existing=await localRequest<any[]>("/accounts").catch(()=>[]);
+      const provider=String(updated.provider||"").trim();
+      const email=String(updated.account_email||"").trim().toLowerCase();
+      const normalize=(x:string)=>x.toLowerCase().replace(/[^a-z0-9]/g,"");
+      if(provider&&!existing.some((a:any)=>a.source_subscription_id===id||
+        (email&&normalize(String(a.provider||""))===normalize(provider)&&
+         String(a.email||"").trim().toLowerCase()===email))){
+        await localRequest<any>("/accounts",{method:"POST",body:JSON.stringify({
+          provider,email,status:"Needs confirmation",source_subscription_id:id
+        })}).catch(()=>undefined);
+      }
       // Existing records and payment history remain intact. Only visibility changes.
       const { syncReminderNotifications }=await import("@/src/lib/notify");
       const upcoming=await api.reminders().catch(()=>[]);
@@ -321,18 +342,26 @@ export const api = {
     return summary;
   },
   ingestLink: async (url:string,source="share",text="",
-    extra:{tags?:string[];remind_in_days?:number}={}) => {
+    extra:{tags?:string[];remind_in_days?:number;caption_text?:string;video_transcript?:string}={}) => {
     // Never hold up saving a bookmark because an external site or AI API fails.
     const item=await req<any>("/ingest/link",{method:"POST",body:JSON.stringify({url,source,text,...extra})});
     if(item?.link_id){
       try{
-        const link=await api.link(String(item.link_id));
-        const stale=!link.analyzed_at||link.analysis_status==="needs_review";
+        const id=String(item.link_id);
+        const changedContext=!!(extra.caption_text?.trim()||extra.video_transcript?.trim());
+        if(changedContext){
+          const updates:Record<string,string>={};
+          if(extra.caption_text?.trim())updates.caption_text=extra.caption_text.trim().slice(0,5000);
+          if(extra.video_transcript?.trim())updates.video_transcript=extra.video_transcript.trim().slice(0,8000);
+          await api.updateLink(id,updates);
+        }
+        const link=await api.link(id);
+        const stale=changedContext||!link.analyzed_at||link.analysis_status==="needs_review";
         if(stale){
-          const saved=await api.analyzeLink(String(item.link_id));
+          const saved=await api.analyzeLink(id);
           return {...item,link:saved,analysis_status:saved.analysis_status};
         }
-      }catch{/* Keep the saved bookmark and its original tags. */}
+      }catch{/* Saved URL, tags, and user content are kept even when Instagram is unavailable. */}
     }
     return item;
   },
@@ -425,7 +454,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["insights", "subscriptions", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "smart-overview", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
+    ["insights", "subscriptions", "subscription", "account", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "smart-overview", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }

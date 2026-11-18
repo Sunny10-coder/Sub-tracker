@@ -2,7 +2,8 @@
 // A Tile is a flat colored square (or wide rectangle). A tile given several `faces`
 // flips (rotateX) between them on a timer like a Lumia live tile. Reduce-motion is respected.
 import React, { ReactNode, useEffect, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, GestureResponderEvent, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { useFocusEffect } from "expo-router";
+import { AccessibilityInfo, Animated, AppState, Easing, GestureResponderEvent, Pressable, Text, View, useWindowDimensions } from "react-native";
 
 import { Icon } from "@/src/components/ui";
 import { TILE_GAP, font, makeStyles, useTheme } from "@/src/theme";
@@ -57,36 +58,52 @@ export function Tile({ title, icon, color, wide, small, badge, onPress, faces, i
       Animated.timing(enter, { toValue: 1, duration: 520, delay: (delay % 1000) * 0.5 + (small ? 300 : 0), easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }).start();
     };
     void run();
-    return () => { alive = false; };
+    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", enabled => {
+      setReduceMotion(enabled);
+      if (enabled) enter.setValue(1);
+    });
+    return () => { alive = false; sub.remove(); };
   }, [enter, delay, small]);
   const faceCount = faces?.length ?? 0;
 
-  useEffect(() => {
-    if (faceCount < 2) return undefined;
+  // Flip only while the Start screen is focused and the app is foregrounded.
+  // Multiple live tiles must not keep animating on other pages or in the background.
+  useFocusEffect(React.useCallback(() => {
+    if (faceCount < 2 || reduceMotion) return undefined;
     let cancelled = false;
+    let foreground = AppState.currentState === "active";
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const tick = () => {
-      Animated.timing(rot, { toValue: 1, duration: FLIP_MS, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(({ finished }) => {
-        if (!finished || cancelled) return;
-        setIdx((i) => (i + 1) % faceCount);
-        rot.setValue(-1);
-        Animated.timing(rot, { toValue: 0, duration: FLIP_MS, easing: Easing.out(Easing.quad), useNativeDriver: true }).start(() => {
-          if (!cancelled) timer = setTimeout(tick, interval);
-        });
-      });
-    };
-    const start = async () => {
-      const reduce = await AccessibilityInfo.isReduceMotionEnabled();
-      if (!reduce && !cancelled) timer = setTimeout(tick, interval + delay);
-    };
-    void start();
-    return () => {
-      cancelled = true;
+    const stop = () => {
       if (timer) clearTimeout(timer);
+      timer = undefined;
       rot.stopAnimation();
       rot.setValue(0);
     };
-  }, [faceCount, interval, delay, rot]);
+    const tick = () => {
+      timer = undefined;
+      if (cancelled || !foreground) return;
+      Animated.timing(rot, { toValue: 1, duration: FLIP_MS,
+        easing: Easing.in(Easing.quad), useNativeDriver: true }).start(({ finished }) => {
+        if (!finished || cancelled || !foreground) return;
+        setIdx(i => (i + 1) % faceCount);
+        rot.setValue(-1);
+        Animated.timing(rot, { toValue: 0, duration: FLIP_MS,
+          easing: Easing.out(Easing.quad), useNativeDriver: true }).start(({ finished: done }) => {
+          if (done && !cancelled && foreground) timer = setTimeout(tick, interval);
+        });
+      });
+    };
+    const startTimer = () => {
+      if (!cancelled && foreground && !timer) timer = setTimeout(tick, interval + delay);
+    };
+    const sub = AppState.addEventListener("change", state => {
+      foreground = state === "active";
+      if (foreground) startTimer();
+      else stop();
+    });
+    startTimer();
+    return () => { cancelled = true; sub.remove(); stop(); };
+  }, [faceCount, interval, delay, rot, reduceMotion]));
 
   const rotateX = rot.interpolate({ inputRange: [-1, 0, 1], outputRange: ["-90deg", "0deg", "90deg"] });
   const smallSize = Math.floor((square - TILE_GAP) / 2);

@@ -296,18 +296,31 @@ def _minus_days(iso: Optional[str], n: int) -> Optional[str]:
 
 
 async def _find_duplicate(extraction: dict) -> Optional[dict]:
-    prov = extraction.get("provider", "").strip().lower()
-    prod = extraction.get("product", "").strip().lower()
-    if not prov and not prod:
+    """Avoid merging distinct accounts belonging to the same provider."""
+    def norm(value):
+        return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+    provider = norm(extraction.get("provider") or extraction.get("product"))
+    if not provider:
         return None
+    email = str(extraction.get("account_email") or "").strip().lower()
+    plan = norm(extraction.get("plan"))
+    kind = str(extraction.get("content_type") or "").lower()
     subs = await db.subscriptions.find(await base_query()).to_list(500)
-    for sub in subs:
-        sp = (sub.get("provider") or "").strip().lower()
-        spr = (sub.get("product") or "").strip().lower()
-        if prov and sp and prov == sp:
-            return clean(sub)
-        if prod and spr and prod == spr:
-            return clean(sub)
+    candidates = [s for s in subs if norm(s.get("provider")) == provider]
+    def compatible(item):
+        saved_plan = norm(item.get("plan"))
+        return not plan or not saved_plan or saved_plan == plan
+    if email:
+        matching = [s for s in candidates if compatible(s) and
+                    str(s.get("account_email") or "").strip().lower() == email]
+        if len(matching) == 1:
+            return clean(matching[0])
+        # Legacy records with no email can match a single cancellation notice.
+        if kind == "cancelled" and len(candidates) == 1 and compatible(candidates[0]) and not candidates[0].get("account_email"):
+            return clean(candidates[0])
+        return None
+    if len(candidates) == 1 and compatible(candidates[0]):
+        return clean(candidates[0])
     return None
 
 
@@ -822,8 +835,7 @@ async def inbox_action(item_id: str, body: InboxAction):
         if ex.get("content_type") == "cancelled":
             upd["status"] = "Cancelled"
             upd["cancellation_date"] = date.today().isoformat()
-        upd["updated_at"] = now_iso()
-        await db.subscriptions.update_one({"id": body.merge_into, "user_id": USER_ID}, {"$set": upd})
+        await _patch_subscription_record(body.merge_into, upd)
         await db.smart_inbox.update_one({"id": item_id}, {"$set": {"status": "merged"}})
         return {"ok": True, "status": "merged", "subscription_id": body.merge_into}
 
@@ -910,20 +922,58 @@ async def create_subscription(body: Dict[str, Any]):
     return clean(doc)
 
 
-@api.patch("/subscriptions/{sid}")
-async def update_subscription(sid: str, body: Dict[str, Any]):
-    doc = await db.subscriptions.find_one({"id": sid, "user_id": USER_ID})
+async def _patch_subscription_record(sid: str, changes: Dict[str, Any]) -> dict:
+    doc = await db.subscriptions.find_one({"id": sid, "user_id": USER_ID, "deleted_at": None})
     if not doc:
-        raise HTTPException(404, "Not found")
-    body.pop("id", None); body.pop("_id", None); body.pop("user_id", None)
+        raise HTTPException(404, "Subscription not found")
+    body = dict(changes)
+    for protected in ("id", "_id", "user_id", "deleted_at", "created_at", "status_history", "payments"):
+        body.pop(protected, None)
+    allowed = ("Active", "Trial", "Paused", "Cancelled", "Expired", "Unknown")
+    if "status" in body and body["status"] not in allowed:
+        raise HTTPException(422, "Invalid subscription status")
+    old = str(doc.get("status") or "Unknown")
+    new = str(body.get("status", old))
+    if "account_email" in body:
+        body["account_email"] = str(body["account_email"] or "").strip().lower()
     if "price" in body and body["price"] != doc.get("price"):
-        hist = doc.get("price_history", [])
+        hist = list(doc.get("price_history") or [])
         hist.append({"price": doc.get("price"), "date": now_iso()})
         body["price_history"] = hist
+    if new in ("Cancelled", "Expired"):
+        body["auto_renew"] = False
+        if new == "Cancelled" and old != new:
+            body["cancellation_date"] = body.get("cancellation_date") or date.today().isoformat()
+        if new == "Expired" and old != new:
+            body["ended_at"] = now_iso()
+    elif old in ("Cancelled", "Expired") and new != old:
+        body.setdefault("cancellation_date", None)
+        body.setdefault("ended_at", None)
+    if old != new:
+        hist = list(doc.get("status_history") or [])
+        hist.append({"from": old, "to": new, "at": now_iso()})
+        body["status_history"] = hist
     body["updated_at"] = now_iso()
-    await db.subscriptions.update_one({"id": sid}, {"$set": body})
-    updated = await db.subscriptions.find_one({"id": sid})
-    return clean(updated)
+    await db.subscriptions.update_one({"id": sid, "user_id": USER_ID, "deleted_at": None}, {"$set": body})
+    kinds = {"$in": ["renewal", "trial_ending"]}
+    if new in ("Cancelled", "Expired", "Paused") or body.get("auto_renew") is False:
+        await db.reminders.update_many(
+            {"user_id": USER_ID, "deleted_at": None, "ref_type": "subscription", "ref_id": sid, "kind": kinds},
+            {"$set": {"completed": True, "completed_reason": "subscription_inactive", "updated_at": now_iso()}})
+    elif old != new or any(k in body for k in ("renewal_date", "trial_end", "auto_renew")):
+        await db.reminders.update_many(
+            {"user_id": USER_ID, "deleted_at": None, "ref_type": "subscription", "ref_id": sid, "kind": kinds},
+            {"$set": {"completed": True, "completed_reason": "renewal_updated", "updated_at": now_iso()}})
+        updated = await db.subscriptions.find_one({"id": sid, "user_id": USER_ID})
+        reminder = _reminder_from(updated, "subscription", sid)
+        if reminder and str(reminder.get("due_date") or "") >= date.today().isoformat():
+            await db.reminders.insert_one(dict(reminder))
+    return clean(await db.subscriptions.find_one({"id": sid, "user_id": USER_ID}))
+
+
+@api.patch("/subscriptions/{sid}")
+async def update_subscription(sid: str, body: Dict[str, Any]):
+    return await _patch_subscription_record(sid, body)
 
 
 @api.post("/subscriptions/{sid}/payment")
@@ -1055,7 +1105,7 @@ async def delete_link(lid: str):
 @api.get("/watchlist")
 async def list_watchlist():
     plans = await db.plan_watchlist.find(await base_query()).sort("created_at", -1).to_list(500)
-    return [clean(p) for p in plans]
+    return [clean(p) for p in plans if p.get("status") not in ("Subscribed", "Moved to plans")]
 
 
 @api.get("/watchlist/{wid}")
@@ -1100,15 +1150,39 @@ async def delete_plan(wid: str):
 
 @api.post("/watchlist/{wid}/convert")
 async def convert_plan(wid: str):
-    doc = await db.plan_watchlist.find_one({"id": wid, "user_id": USER_ID})
+    """Keep the watchlist item as history, but expose the subscription only once."""
+    doc = await db.plan_watchlist.find_one({"id": wid, "user_id": USER_ID, "deleted_at": None})
     if not doc:
-        raise HTTPException(404, "Not found")
+        raise HTTPException(404, "Watchlist item not found")
+    linked_id = doc.get("subscription_id")
+    prior = None
+    if linked_id:
+        prior = await db.subscriptions.find_one({"id": linked_id, "user_id": USER_ID, "deleted_at": None})
+    if not prior:
+        prior = await db.subscriptions.find_one({"source_watchlist_id": wid, "user_id": USER_ID, "deleted_at": None})
+    email = str(doc.get("account_email") or "").strip().lower()
+    if not prior and email:
+        prior = await db.subscriptions.find_one({
+            "provider": doc["provider"], "plan": doc.get("plan", ""),
+            "account_email": email, "user_id": USER_ID, "deleted_at": None
+        })
+    if prior:
+        sid = prior["id"]
+        await db.plan_watchlist.update_one({"id": wid, "user_id": USER_ID},
+            {"$set": {"status": "Subscribed", "subscription_id": sid, "updated_at": now_iso()}})
+        return {"ok": True, "duplicate": True, "subscription_id": sid}
     ex = {"content_type": "subscription", "provider": doc["provider"], "product": doc["provider"],
           "plan": doc.get("plan", ""), "price": doc.get("price"), "currency": doc.get("currency", "AED"),
-          "billing_cycle": doc.get("billing_cycle", "monthly"), "category": "Other", "tags": doc.get("tags", [])}
+          "billing_cycle": doc.get("billing_cycle", "monthly"), "account_email": email,
+          "promo_code": doc.get("promo_code", ""), "category": "Other", "tags": doc.get("tags", [])}
     sid = await _create_subscription_from(ex, "watchlist", doc.get("url", ""), None)
-    await db.plan_watchlist.update_one({"id": wid}, {"$set": {"status": "Subscribed", "updated_at": now_iso()}})
-    return {"ok": True, "subscription_id": sid}
+    # Moving a watchlist idea does not prove there is a paid, active subscription.
+    await db.subscriptions.update_one({"id": sid, "user_id": USER_ID},
+        {"$set": {"status": "Unknown", "auto_renew": False, "review_required": True,
+                  "source_watchlist_id": wid, "updated_at": now_iso()}})
+    await db.plan_watchlist.update_one({"id": wid, "user_id": USER_ID},
+        {"$set": {"status": "Subscribed", "subscription_id": sid, "updated_at": now_iso()}})
+    return {"ok": True, "duplicate": False, "subscription_id": sid}
 
 
 # ---------------------------------------------------------------------------
@@ -1169,7 +1243,20 @@ async def insights():
     subs = await db.subscriptions.find(await base_query()).to_list(500)
     subs = [clean(s) for s in subs]
     active = [s for s in subs if s.get("status") in ("Active", "Trial")]
-    monthly = round(sum(_monthly_cost(s) for s in active), 2)
+    # Do not add USD, AED, EUR etc. as though they shared a currency.
+    # Trial plans do not count as paid charges unless explicitly confirmed.
+    monthly_by_currency: Dict[str, float] = {}
+    for sub in active:
+        if sub.get("auto_renew") is False or sub.get("review_required") is True:
+            continue
+        if sub.get("status") == "Trial" and sub.get("trial_paid") is not True:
+            continue
+        currency = str(sub.get("currency") or "").upper()
+        if currency and isinstance(sub.get("price"), (int, float)):
+            monthly_by_currency[currency] = monthly_by_currency.get(currency, 0) + _monthly_cost(sub)
+    monthly_by_currency = {key: round(value, 2) for key, value in monthly_by_currency.items()}
+    display_currency = str(settings.get("currency") or "AED").upper()
+    monthly = round(monthly_by_currency.get(display_currency, 0), 2)
     yearly = round(monthly * 12, 2)
 
     today = datetime.now(timezone.utc).date()
@@ -1198,7 +1285,8 @@ async def insights():
     cats: Dict[str, float] = {}
     cat_count: Dict[str, list] = {}
     for s in active:
-        c = s.get("category", "Other")
+        currency = str(s.get("currency") or "").upper()
+        c = f"{s.get('category', 'Other')} / {currency or 'Unknown currency'}"
         cats[c] = cats.get(c, 0) + _monthly_cost(s)
         cat_count.setdefault(c, []).append(s.get("provider"))
     top_category = max(cats, key=cats.get) if cats else None
@@ -1214,14 +1302,16 @@ async def insights():
 
     watch = await db.plan_watchlist.find(await base_query()).to_list(200)
     return {
-        "currency": settings["currency"],
+        "currency": display_currency,
         "monthly_spend": monthly, "yearly_spend": yearly,
+        "monthly_by_currency": monthly_by_currency,
+        "spend_is_partial": any(k != display_currency for k in monthly_by_currency),
         "active_count": len(active), "total_count": len(subs),
         "renewals_30d": renewals, "trials_ending": trials,
         "category_breakdown": [{"category": k, "amount": round(v, 2)} for k, v in
                                sorted(cats.items(), key=lambda x: -x[1])],
         "top_category": top_category, "overlaps": overlaps,
-        "price_increases": increases, "watchlist_count": len(watch),
+        "price_increases": increases, "watchlist_count": len([p for p in watch if p.get("status") not in ("Subscribed", "Moved to plans")]),
     }
 
 
