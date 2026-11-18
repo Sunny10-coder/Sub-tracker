@@ -13,7 +13,10 @@ import { font, makeStyles, useTheme } from "@/src/theme";
 const BASIS_NOTE: Record<string, string> = {
   readme: "Based on the repo details and README.",
   repo_metadata: "Based on the repo description and topics (README not available).",
-  caption: "Based on the post caption and hashtags. The video itself was not watched.",
+  caption: "Based on public Instagram caption and hashtags, not video frames or audio.",
+  user_caption: "Based on the caption you supplied. Video frames/audio were not analyzed.",
+  user_transcript: "Based on your supplied transcript, not an independently extracted video transcript.",
+  user_note: "Based on your note; the original Instagram content was unavailable.",
   metadata: "Based on the title and description.",
   page_text: "Based on the page text.",
   url_only: "The page could not be read, so only the link and your note were used. Add a note or tags to improve it.",
@@ -28,6 +31,8 @@ export default function LinkDetail() {
   const { data, isLoading, refetch } = useLink(id!);
   const invalidate = useInvalidateAll();
   const [newTags, setNewTags] = useState("");
+  const [captionDraft, setCaptionDraft] = useState<string | null>(null);
+  const [transcriptDraft, setTranscriptDraft] = useState<string | null>(null);
   const allLinks=useLinks();
 
 
@@ -35,6 +40,13 @@ export default function LinkDetail() {
   const analysis=useMutation({mutationFn:()=>api.analyzeLink(id!),onSuccess:refresh});
   const del = useMutation({ mutationFn: () => api.deleteLink(id!), onSuccess: () => { invalidate(); router.back(); } });
   const patch = useMutation({ mutationFn: (b: Record<string, unknown>) => api.updateLink(id!, b), onSuccess: refresh });
+  const evidence = useMutation({
+    mutationFn: async (b: {caption_text:string;video_transcript:string}) => {
+      await api.updateLink(id!,b);
+      return api.analyzeLink(id!);
+    },
+    onSuccess: () => {setCaptionDraft(null);setTranscriptDraft(null);refresh();}
+  });
   const watch=useMutation({mutationFn:(enabled:boolean)=>api.smartWatchRepo(id!,enabled),onSuccess:refresh});
   const remind = useMutation({
     mutationFn: (days: number) => api.linkRemind(id!, { days }),
@@ -91,6 +103,42 @@ export default function LinkDetail() {
           </Card>
         ) : null}
 
+        {kind === "instagram" ? (
+          <Card style={{gap:10}}>
+            <Text style={styles.label}>Instagram content</Text>
+            <Text style={styles.fine}>
+              {l.instagram?.type === "reel" ? "Reel" : l.instagram?.type === "post" ? "Post" : "Instagram link"}
+              {l.instagram?.author ? " · @"+l.instagram.author : ""}
+              {" · "}
+              {l.instagram?.media_analyzed === true ? "Video analyzed" : "Video not independently analyzed"}
+            </Text>
+            {l.instagram_caption ? (
+              <View style={{gap:4}}>
+                <Text style={styles.label}>saved caption</Text>
+                <Text style={styles.body} selectable>{l.instagram_caption}</Text>
+              </View>
+            ) : null}
+            <Text style={styles.fine}>If public metadata is unavailable, paste the original caption or a transcript to classify what the Reel is about. Edits are saved to this link and automatically re-analyzed.</Text>
+            <TextInput style={[styles.input,{minHeight:88,textAlignVertical:"top"}]}
+              placeholder="Instagram caption and hashtags"
+              placeholderTextColor={colors.muted} multiline
+              value={captionDraft ?? l.caption_text ?? ""}
+              onChangeText={setCaptionDraft} testID="instagram-edit-caption" />
+            <TextInput style={[styles.input,{minHeight:116,textAlignVertical:"top"}]}
+              placeholder="Spoken words or transcript (optional)"
+              placeholderTextColor={colors.muted} multiline
+              value={transcriptDraft ?? l.video_transcript ?? ""}
+              onChangeText={setTranscriptDraft} testID="instagram-edit-transcript" />
+            <PrimaryButton title="Save content and update tags" icon="content-save-outline"
+              loading={evidence.isPending} disabled={evidence.isPending ||
+                (captionDraft === null && transcriptDraft === null)}
+              onPress={()=>evidence.mutate({
+                caption_text:captionDraft ?? l.caption_text ?? "",
+                video_transcript:transcriptDraft ?? l.video_transcript ?? ""
+              })} testID="instagram-save-content" />
+            {evidence.isError ? <Text style={styles.fine}>{(evidence.error as Error).message}</Text> : null}
+          </Card>
+        ) : null}
         {l.summary ? <Card><Text style={styles.label}>summary</Text><Text style={styles.body} selectable>{l.summary}</Text></Card> : null}
 
         {l.use_cases?.length ? (
