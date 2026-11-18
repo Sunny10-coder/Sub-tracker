@@ -35,7 +35,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - name: Install Yarn Classic
         run: npm install --global yarn@1.22.22
       - name: Install dependencies
