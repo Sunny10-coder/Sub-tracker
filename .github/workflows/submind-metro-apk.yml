@@ -41,6 +41,8 @@ jobs:
         run: yarn install --ignore-scripts --ignore-engines --non-interactive
       - name: Verify TypeScript
         run: npx tsc --noEmit -p .
+      - name: Check Instagram content tagging
+        run: node scripts/check-instagram.cjs
       - name: Bundle JavaScript for Android
         run: npx expo export --platform android
       - name: Generate native Android project
