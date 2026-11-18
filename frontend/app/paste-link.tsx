@@ -9,7 +9,7 @@ import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, useInvalidateAll } from "@/src/lib/api";
-import { KIND_ICON, KIND_LABEL, REMIND_PRESETS, detectLinkKind, looksLikeUrl, parseTags } from "@/src/lib/format";
+import { KIND_ICON, KIND_LABEL, REMIND_PRESETS, detectLinkKind, looksLikeUrl, extractSharedUrl, parseTags } from "@/src/lib/format";
 import { AppHeader, Card, ChipRow, Icon, PrimaryButton } from "@/src/components/ui";
 import { FormScroll, TextField } from "@/src/components/form";
 import { font, makeStyles, useTheme } from "@/src/theme";
@@ -28,14 +28,20 @@ export default function PasteLink() {
   const {url:sharedUrl}=useLocalSearchParams<{url?:string}>();
   const insets = useSafeAreaInsets();
   const invalidate = useInvalidateAll();
-  const [url, setUrl] = useState(typeof sharedUrl==="string"?sharedUrl:"");
+  const [url, setUrl] = useState(typeof sharedUrl==="string"?(extractSharedUrl(sharedUrl)||sharedUrl):"");
   const [note, setNote] = useState("");
   const [caption, setCaption] = useState("");
   const [transcript, setTranscript] = useState("");
   const [tags, setTags] = useState("");
   const [remind, setRemind] = useState(REMIND_PRESETS[0].label);
 
-  useEffect(()=>{if(typeof sharedUrl==="string"&&sharedUrl.trim())setUrl(sharedUrl.trim());},[sharedUrl]);
+  useEffect(()=>{
+    if(typeof sharedUrl!=="string"||!sharedUrl.trim())return;
+    const found=extractSharedUrl(sharedUrl);
+    if(found)setUrl(found);
+    const context=found?sharedUrl.replace(found,"").trim():"";
+    if(context)setNote(prev=>prev||context.slice(0,1300));
+  },[sharedUrl]);
 
   // If a link is already on the clipboard, offer it straight away.
   useEffect(() => {
@@ -43,7 +49,12 @@ export default function PasteLink() {
     const peek = async () => {
       try {
         const t = (await Clipboard.getStringAsync()).trim();
-        if (alive && looksLikeUrl(t)) setUrl((cur) => cur || t);
+        const found=extractSharedUrl(t);
+        if (alive && found) {
+          setUrl((cur) => cur || found);
+          const context=t.replace(found,"").trim();
+          if(context)setNote(prev=>prev||context.slice(0,1300));
+        }
       } catch {
         // clipboard unavailable: user can still type or paste
       }
@@ -70,7 +81,12 @@ export default function PasteLink() {
 
   const paste = async () => {
     const t = await Clipboard.getStringAsync();
-    if (t) setUrl(t.trim());
+    const found=extractSharedUrl(t);
+    if (found) {
+      setUrl(found);
+      const context=t.replace(found,"").trim();
+      if(context)setNote(prev=>prev||context.slice(0,1300));
+    } else if (t) setUrl(t.trim());
   };
 
   return (
