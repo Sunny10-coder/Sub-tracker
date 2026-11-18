@@ -4,7 +4,8 @@ import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/src/components/ui";
-import { useInbox, useReminders, useSubscriptions, useSettings, useArchivedSubscriptions } from "@/src/lib/api";
+import { useInbox, useReminders, useSubscriptions, useSettings, useArchivedSubscriptions, useLinks, useNotes } from "@/src/lib/api";
+import { refreshHomeWidget } from "@/src/lib/widget-sync";
 import { syncReminderNotifications } from "@/src/lib/notify";
 import { makeStyles, useTheme } from "@/src/theme";
 
@@ -87,6 +88,12 @@ export default function TabsLayout() {
   const subs=useSubscriptions();
   const archived=useArchivedSubscriptions();
   const settings=useSettings();
+  const widgetLinks=useLinks();
+  const widgetNotes=useNotes();
+  useEffect(()=>{
+    if(!subs.data||!reminders.data||!widgetLinks.data||!widgetNotes.data)return;
+    void refreshHomeWidget({subscriptions:subs.data,reminders:reminders.data,links:widgetLinks.data});
+  },[subs.data,reminders.data,widgetLinks.data,widgetNotes.data]);
   useEffect(() => {
     if(!reminders.data||!subs.data||!archived.data)return;
     const lead=Math.max(1,Math.min(30,Number(settings.data?.cancel_notice_days)||3));

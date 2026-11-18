@@ -3,13 +3,14 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { LogBox, View } from "react-native";
+import { AppState, LogBox, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/src/components/error-boundary";
 import { initServerUrl } from "@/src/lib/api";
+import { refreshHomeWidget } from "@/src/lib/widget-sync";
 import { autoSyncGmailOnLaunch } from "@/src/lib/automatic-mail-sync";
 import { Platform } from "react-native";
 import { queryClient } from "@/src/query-client";
@@ -25,6 +26,13 @@ export default function RootLayout() {
     MaterialDesignIcons: require("@react-native-vector-icons/material-design-icons/fonts/MaterialDesignIcons.ttf"),
   });
 
+  useEffect(()=>{
+    void refreshHomeWidget();
+    const listener=AppState.addEventListener("change",state=>{
+      if(state==="active")void refreshHomeWidget();
+    });
+    return ()=>listener.remove();
+  },[]);
   // Load the server address saved in Settings before any screen makes a request.
   const [serverReady, setServerReady] = useState(false);
   useEffect(() => {

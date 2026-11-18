@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { storage } from "@/src/utils/storage";
 import { getVault, localRequest, localInsights } from "@/src/lib/local-vault";
+import { refreshHomeWidget } from "@/src/lib/widget-sync";
 import * as direct from "@/src/lib/direct-providers";
 import { recommendToolsForGoal, isGoalQuery } from "@/src/lib/tool-goal-matcher";
 import { analyzePublicLink, suggestRelatedLinks, SMART_LINK_MAX_BULK } from "@/src/lib/smart-link-intelligence";
@@ -278,6 +279,13 @@ export const api = {
 
   links: (source?: string) => req<any[]>(`/links${source && source !== "All" ? `?source=${encodeURIComponent(source)}` : ""}`),
   linkTags: () => localRequest<{ tag: string; count: number }[]>("/links/tags"),
+  notes: () => localRequest<any[]>("/notes"),
+  createNote: (body:string,title?:string) =>
+    localRequest<any>("/notes",{method:"POST",body:JSON.stringify({body,title})}),
+  updateNote: (id:string,body:string,title?:string) =>
+    localRequest<any>("/notes/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({body,title})}),
+  deleteNote: (id:string) =>
+    localRequest<any>("/notes/"+encodeURIComponent(id),{method:"DELETE"}),
   link: (id: string) => req<any>(`/links/${id}`),
   linkOpened: (id: string) => req<any>(`/links/${id}/opened`, { method: "POST" }),
   linkRemind: (id: string, b: { days?: number; date?: string; title?: string }) =>
@@ -426,6 +434,7 @@ export const useSmartOverview = () => useQuery({queryKey:["smart-overview"],quer
 export const useAccounts = () => useQuery({queryKey:["local-accounts"],queryFn:api.accounts});
 export const useVaultDashboard = () => useQuery({queryKey:["local-vault-dashboard"],queryFn:api.vaultDashboard});
 export const usePrompts = () => useQuery({queryKey:["local-prompts"],queryFn:api.prompts});
+export const useNotes = () => useQuery({queryKey:["notes"],queryFn:api.notes});
 export const useMailboxes = () => useQuery({queryKey:["local-mailboxes"],queryFn:api.mailboxes});
 export const useReviewQueue = () => useQuery({queryKey:["local-review"],queryFn:api.reviewQueue});
 export const usePromoCodes = () => useQuery({queryKey:["local-promos"],queryFn:api.promoCodes});
@@ -453,8 +462,12 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 
 export function useInvalidateAll() {
   const qc = useQueryClient();
-  return () =>
-    ["insights", "subscriptions", "subscription", "account", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "smart-overview", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
+  return () => {
+    // Refresh local widget immediately. React Query refetch refreshes it again
+    // with any optional remote subscription and link data.
+    void refreshHomeWidget();
+    ["notes", "insights", "subscriptions", "subscription", "account", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "smart-overview", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
+  };
 }

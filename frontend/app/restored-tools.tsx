@@ -5,6 +5,8 @@ import { AppHeader, Icon } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const TOOLS = [
+  { title: "Home Screen Widget", detail: "Three Lumia sections · expiring subscriptions · notes · reminder links", icon: "view-dashboard", path: "/widget-settings" },
+  { title: "Personal Notes", detail: "Create, edit and keep notes stored on this phone", icon: "note-text", path: "/notes" },
   { title: "Smart Companion", detail: "Goals · credit optimizer · benefit matcher · follow-ups · GitHub watch · connections", icon: "brain", path: "/smart-companion" },
   { title: "Gmail Sync", detail: "Connected inboxes · verified findings · duplicate-aware import", icon: "gmail", path: "/gmail-sync" },
   { title: "AI Models & Keys", detail: "Gemini, Groq, NVIDIA and Brave · test access", icon: "key-variant", path: "/api-keys" },
