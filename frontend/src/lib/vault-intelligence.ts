@@ -51,11 +51,40 @@ export function canonicalUrl(raw: string): string {
     url.hash = "";
     url.hostname = url.hostname.toLowerCase();
     for (const param of [...url.searchParams.keys()]) {
-      if (/^utm_|^(fbclid|gclid|igshid|mc_cid|mc_eid|ref_src)$/i.test(param)) url.searchParams.delete(param);
+      if (/^utm_|^(fbclid|gclid|igsh|igshid|mc_cid|mc_eid|ref_src)$/i.test(param)) url.searchParams.delete(param);
     }
     url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    if (/^(?:www\.|m\.)?instagram\.com$/i.test(url.hostname)) {
+      const match = /^\/(reel|reels|p|tv)\/([a-zA-Z0-9_-]+)\/?$/i.exec(url.pathname);
+      if (match) url.pathname = "/" + (match[1].toLowerCase() === "reels" ? "reel" : match[1].toLowerCase()) + "/" + match[2];
+    }
     return url.toString().replace(/\/$/, "");
   } catch { throw Error("Enter a valid http:// or https:// link"); }
+}
+const IG_STOP = new Set(["instagram","reel","reels","post","video","videos","like","likes",
+ "comment","comments","follow","following","share","shared","watch","views","view","check",
+ "this","that","there","their","what","when","where","with","from","have","your",
+ "just","about","some","more","than","only","best","into","they","them","here","our",
+ "link","http","https","www","original","audio","official"]);
+/** Topic tags must originate from caption, note or transcript, not Instagram's URL. */
+export function instagramEvidenceTags(text: string): string[] {
+  const input=String(text||"").slice(0,6000);
+  const hashtags=Array.from(input.matchAll(/#([\p{L}\p{N}_]{2,45})/gu)).map(x=>x[1].toLowerCase());
+  const terms=input.replace(/#[\p{L}\p{N}_]+/gu," ")
+    .toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_-]{2,34}/gu)||[];
+  const keywords=Array.from(new Set(terms.filter(x=>!IG_STOP.has(x)&&!/^\d+$/.test(x)))).slice(0,5);
+  return Array.from(new Set([...hashtags,...inferTags(input),...keywords])).slice(0,14);
+}
+export function instagramPostInfo(raw: string): {type:"reel"|"post"|"story"|"other";shortcode:string} {
+  try {
+    const u=new URL(raw), host=u.hostname.replace(/^(www\.|m\.)/,"").toLowerCase();
+    if(host!=="instagram.com")return {type:"other",shortcode:""};
+    const parts=u.pathname.split("/").filter(Boolean);
+    const kind=(parts[0]||"").toLowerCase();
+    if(["reel","reels","tv","p"].includes(kind)&&/^[a-zA-Z0-9_-]{3,64}$/.test(parts[1]||""))
+      return {type:kind==="p"?"post":"reel",shortcode:parts[1]};
+    return {type:kind==="stories"?"story":"other",shortcode:""};
+  }catch{return {type:"other",shortcode:""};}
 }
 export function classifyLink(url: string, note = "", source = "share"): VaultItem {
   const canonical_url = canonicalUrl(url);
@@ -65,7 +94,8 @@ export function classifyLink(url: string, note = "", source = "share"): VaultIte
     domain.split(".")[0].replace(/^./, (c) => c.toUpperCase());
   const path = decodeURIComponent(parsed.pathname).replace(/[-_/]+/g, " ").trim().slice(0, 80);
   const context = [domain, path, note].join(" ");
-  const category = inferCategory(context);
+  const ig=instagramPostInfo(canonical_url);
+  const category = inferCategory(note || (ig.type === "other" ? context : ""));
   const kind=domain==="github.com"&&parsed.pathname.split("/").filter(Boolean).length>=2?"github":
     domain==="instagram.com"||domain==="www.instagram.com"?"instagram":
     domain==="youtube.com"||domain==="youtu.be"?"youtube":
@@ -76,11 +106,14 @@ export function classifyLink(url: string, note = "", source = "share"): VaultIte
     kind==="twitter"?"X / Twitter":"Websites";
   return {
     url: url.trim(), canonical_url, provider, source, category, kind, collection,
-    title: path.length > 3 ? path : provider,
+    title: kind==="instagram" ? ("Instagram " + (ig.type==="reel"?"Reel":ig.type==="post"?"Post":ig.type==="story"?"Story":"Link")) :
+      path.length > 3 ? path : provider,
     summary: note.trim().slice(0, 700),
     note: note.trim().slice(0, 1500),
-    tags: inferTags(context, [domain.split(".")[0]]),
-    classification: "local-rules", review_required: false,
+    tags: kind==="instagram" ? ["instagram",...(ig.type!=="other"?[ig.type]:[]),...instagramEvidenceTags(note)].slice(0,16) :
+      inferTags(context, [domain.split(".")[0]]),
+    ...(kind==="instagram"?{instagram:{type:ig.type,shortcode:ig.shortcode}}:{}),
+    classification: "local-rules", review_required: kind==="instagram" && !note.trim(),
   };
 }
 /** Expiry is recorded only when a matching contextual date is explicit. */
