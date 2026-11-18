@@ -16,7 +16,7 @@ import { font, makeStyles, useTheme } from "@/src/theme";
 
 const KIND_HINT: Record<string, string> = {
   github: "Repo details, language, stars and a few small use cases will be added, and it goes into your GitHub section.",
-  instagram: "The caption and hashtags are read and tagged. SubMind cannot watch the video itself, so add a note if the caption is empty.",
+  instagram: "Public captions are used when available. Add the caption or a transcript to get detailed topic tags when Instagram blocks access.",
   youtube: "Title and channel are read, then it is summarised and tagged.",
   article: "The page is read, summarised and tagged. Pricing or offer pages also go to your inbox.",
 };
@@ -30,6 +30,8 @@ export default function PasteLink() {
   const invalidate = useInvalidateAll();
   const [url, setUrl] = useState(typeof sharedUrl==="string"?sharedUrl:"");
   const [note, setNote] = useState("");
+  const [caption, setCaption] = useState("");
+  const [transcript, setTranscript] = useState("");
   const [tags, setTags] = useState("");
   const [remind, setRemind] = useState(REMIND_PRESETS[0].label);
 
@@ -56,6 +58,8 @@ export default function PasteLink() {
   const save = useMutation({
     mutationFn: () => api.ingestLink(url.trim(), "share", note, {
       tags: parseTags(tags),
+      ...(kind === "instagram" && caption.trim() ? { caption_text: caption.trim() } : {}),
+      ...(kind === "instagram" && transcript.trim() ? { video_transcript: transcript.trim() } : {}),
       ...(days !== null ? { remind_in_days: days } : {}),
     }),
     onSuccess: (res) => {
@@ -86,6 +90,16 @@ export default function PasteLink() {
           </Card>
         ) : null}
 
+        {kind === "instagram" ? (
+          <Card style={{ gap: 9 }}>
+            <Text style={styles.detectedTitle}>Reel content</Text>
+            <Text style={styles.hint}>Paste text from the Reel. SubMind will use it to describe and tag the content. It cannot reliably read the video or its audio from a link alone.</Text>
+            <TextField label="Caption (optional)" value={caption} onChangeText={setCaption}
+              placeholder="Paste the original Instagram caption and hashtags" multiline testID="instagram-caption" />
+            <TextField label="Transcript (optional)" value={transcript} onChangeText={setTranscript}
+              placeholder="Paste what is spoken in the video for detailed content tags" multiline testID="instagram-transcript" />
+          </Card>
+        ) : null}
         <TextField label="Tags (optional)" value={tags} onChangeText={setTags} placeholder="python, backend, ideas" testID="link-tags" />
         <TextField label="Note (optional)" value={note} onChangeText={setNote} placeholder="Why are you saving this? You can paste the caption too" multiline testID="link-note" />
 
