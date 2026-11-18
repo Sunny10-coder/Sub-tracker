@@ -57,6 +57,29 @@ function normalizeWatch(a:Dict):Dict{return {...a,id:a.id||"watch-"+normalized(a
 function normalizePromo(a:Dict):Dict{return {...a,id:a.id||"promo-"+normalized(a.Service+"|"+a.Code),
  provider:a.provider||a.Service||"Unknown",code:a.code||a.Code||"",
  discount_text:a.discount_text||a.Discount||"",verified:a.verified===true,source:a.source||a.Source||"Excel"}}
+// Account IDs are authoritative. Fallback matching requires a known provider/email pair.
+function accountFor(v:Vault,sub:Dict):Dict|undefined{
+ const id=string(sub.account_id);
+ if(id){const match=v.accounts.find(a=>String(a.id)===id);if(match)return match;}
+ const email=string(sub.account_email).toLowerCase();
+ return email?v.accounts.find(a=>normalized(a.provider)===normalized(sub.provider)&&
+   string(a.email).toLowerCase()===email):undefined;
+}
+function belongsToAccount(sub:Dict,account:Dict):boolean{
+ if(string(sub.account_id))return String(sub.account_id)===String(account.id);
+ const email=string(sub.account_email).toLowerCase();
+ return !!email&&email===string(account.email).toLowerCase()&&
+   normalized(sub.provider)===normalized(account.provider);
+}
+function connectAccount(v:Vault,sub:Dict,createIfMissing=false):void{
+ let account=accountFor(v,sub);
+ if(!account&&createIfMissing){
+   account=normalizeAccount({id:"acct-"+uid(),provider:sub.provider,email:string(sub.account_email),
+     status:"Needs confirmation",source_subscription_id:sub.id,created_at:nowIso()});
+   v.accounts.unshift(account);
+ }
+ sub.account_id=account?account.id:null;
+}
 function mergeById(current:Dict[],fresh:Dict[]):Dict[]{
  const existing=new Map(current.map(x=>[String(x.id),x]));
  for(const x of fresh){const old=existing.get(String(x.id));existing.set(String(x.id),old?{...x,...old}:x)}
@@ -200,30 +223,75 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  if(method!=="GET")return mutate(async()=>{const v=await getVault();let result:any=null;
    const collection=(name:keyof Vault)=>((v[name] as Dict[])||[]);
    if(route==="/subscriptions/check-duplicate"&&method==="POST"){
-      const existing=v.subscriptions.find(x=>normalized(x.provider)===normalized(data.provider)
-        &&normalized(x.plan)===normalized(data.plan)&&string(x.account_email)===string(data.account_email));
+      const email=string(data.account_email).toLowerCase();
+      const existing=email?v.subscriptions.find(x=>normalized(x.provider)===normalized(data.provider)
+        &&normalized(x.plan)===normalized(data.plan)&&string(x.account_email).toLowerCase()===email):undefined;
       result={duplicate:Boolean(existing),existing_id:existing?.id||null,subscription:existing||null};
    }else if(route==="/subscriptions"&&method==="POST"){
       const rec=normalizeSub({...data,id:"sub-"+uid(),created_at:nowIso()});
       if(v.subscriptions.some(x=>normalized(x.provider)===normalized(rec.provider)
        &&normalized(x.plan)===normalized(rec.plan)&&string(x.account_email)&&string(x.account_email)===string(rec.account_email)))
        throw Error("409: That plan already exists for the same sign-in email");
+      connectAccount(v,rec,Boolean(rec.account_email));
       v.subscriptions.unshift(rec);result=rec;
    }else if(route.startsWith("/subscriptions/")&&method==="PATCH"){
       const id=route.split("/")[2];const x=v.subscriptions.find(a=>a.id===id);if(!x)notFound();
-      Object.assign(x,normalizeSub({...x,...data}));result=x;
+      const previousStatus=String(x.status||"");
+      if(data.status&&!["Active","Trial","Paused","Cancelled","Expired","Unknown"].includes(String(data.status)))
+        throw Error("Unsupported subscription status.");
+      const next=normalizeSub({...x,...data});
+      if("account_email" in data||"provider" in data||"account_id" in data)
+        connectAccount(v,next,Boolean(next.account_email));
+      if(["Cancelled","Expired"].includes(next.status)){
+        next.auto_renew=false;
+        if(next.status==="Cancelled"&&previousStatus!=="Cancelled")
+          next.cancellation_date=string(data.cancellation_date)||nowIso().slice(0,10);
+        if(next.status==="Expired"&&previousStatus!=="Expired")next.ended_at=nowIso();
+        for(const reminder of v.reminders){
+          if(string(reminder.ref_id)===id&&string(reminder.ref_type)==="subscription"&&
+            ["renewal","trial_ending","subscription"].includes(string(reminder.kind))){
+            reminder.completed=true;reminder.completed_reason="subscription_inactive";
+          }
+        }
+        connectAccount(v,next,true);
+      }else if(["Cancelled","Expired"].includes(previousStatus)){
+        next.cancellation_date=null;next.ended_at=null;
+      }
+      Object.assign(x,next,{updated_at:nowIso()});result=x;
    }else if(route.startsWith("/subscriptions/")&&method==="DELETE"){
       const id=route.split("/")[2];v.subscriptions=v.subscriptions.filter(x=>x.id!==id);result={ok:true};
    }else if(route==="/accounts"&&method==="POST"){
       const rec=normalizeAccount({...data,id:"acct-"+uid()});
       if(!rec.provider||rec.provider==="Unknown")throw Error("Account provider is required");
       if(v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&string(a.email).toLowerCase()===string(rec.email).toLowerCase()))throw Error("409: This provider and sign-in email are already saved");
-      v.accounts.unshift(rec);result=rec;
+      v.accounts.unshift(rec);
+      if(rec.email)for(const sub of v.subscriptions)
+        if(!sub.account_id&&normalized(sub.provider)===normalized(rec.provider)&&
+          string(sub.account_email).toLowerCase()===string(rec.email).toLowerCase())
+          sub.account_id=rec.id;
+      result=rec;
    }else if(route.startsWith("/accounts/")&&method==="PATCH"){
       const id=route.split("/")[2];const x=v.accounts.find(a=>a.id===id);if(!x)notFound();
-      Object.assign(x,data);result=x;
+      const oldProvider=normalized(x.provider),oldEmail=string(x.email).toLowerCase();
+      const provider=string(data.provider||x.provider);
+      const email=("email" in data?string(data.email):string(x.email)).toLowerCase();
+      if(!provider)throw Error("Account provider is required.");
+      if(v.accounts.some(a=>a.id!==x.id&&normalized(a.provider)===normalized(provider)&&
+        string(a.email).toLowerCase()===email))
+        throw Error("409: Another account already uses that provider and sign-in email.");
+      Object.assign(x,data,{provider,email,updated_at:nowIso()});
+      for(const sub of v.subscriptions){
+        if(string(sub.account_id)===String(x.id)||(!sub.account_id&&oldEmail&&
+          normalized(sub.provider)===oldProvider&&string(sub.account_email).toLowerCase()===oldEmail)){
+          sub.account_id=x.id;sub.provider=provider;sub.account_email=email;
+          sub.updated_at=nowIso();
+        }
+      }
+      result=x;
    }else if(route.startsWith("/accounts/")&&method==="DELETE"){
-      v.accounts=v.accounts.filter(a=>a.id!==route.split("/")[2]);result={ok:true};
+      const id=route.split("/")[2];
+      for(const sub of v.subscriptions)if(String(sub.account_id)===id)sub.account_id=null;
+      v.accounts=v.accounts.filter(a=>a.id!==id);result={ok:true};
    }else if(route.startsWith("/subscriptions/")&&route.endsWith("/payment")&&method==="POST"){
       const id=route.split("/")[2],record=v.subscriptions.find(x=>x.id===id);
       if(!record)notFound();
@@ -247,13 +315,22 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else if(route.startsWith("/watchlist/")&&route.endsWith("/convert")&&method==="POST"){
       const id=route.split("/")[2];const plan=v.watchlist.find(x=>x.id===id);
       if(!plan)notFound();
-      const existing=v.subscriptions.find(s=>normalized(s.provider)===normalized(plan.provider)&&normalized(s.plan)===normalized(plan.plan)
-        &&string(s.account_email)===string(plan.account_email||""));
-      if(existing)result={duplicate:true,subscription_id:existing.id,subscription:existing};
-      else{
+      const linked=v.subscriptions.find(s=>String(s.source_watchlist_id)===id||
+        (string(plan.subscription_id)&&String(s.id)===String(plan.subscription_id)));
+      const email=string(plan.account_email).toLowerCase();
+      const same=v.subscriptions.find(s=>email&&normalized(s.provider)===normalized(plan.provider)&&
+        normalized(s.plan)===normalized(plan.plan)&&string(s.account_email).toLowerCase()===email);
+      const existing=linked||same;
+      if(existing){
+        plan.status="Moved to plans";plan.subscription_id=existing.id;
+        result={duplicate:true,subscription_id:existing.id,subscription:existing};
+      }else{
         const sub=normalizeSub({...plan,id:"sub-"+uid(),status:"Unknown",review_required:true,
-          source:"watchlist",created_at:nowIso(),account_email:string(plan.account_email),billing_cycle:plan.billing_cycle||"unknown"});
-        v.subscriptions.unshift(sub);plan.status="Moved to plans";
+          source:"watchlist",source_watchlist_id:id,created_at:nowIso(),
+          account_email:email,billing_cycle:plan.billing_cycle||"unknown"});
+        connectAccount(v,sub,Boolean(email));
+        v.subscriptions.unshift(sub);
+        plan.status="Moved to plans";plan.subscription_id=sub.id;
         result={duplicate:false,subscription_id:sub.id,subscription:sub};
       }
    }else if(route.startsWith("/watchlist/")&&method==="DELETE"){
@@ -634,10 +711,10 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    await save(v);return result as T;
  });
  const v=await getVault();const accounts:Dict[]=v.accounts.map((a:Dict)=>({...a,
-  plans:v.subscriptions.filter(s=>(s.account_email&&a.email&&s.account_email===a.email&&normalized(s.provider)===normalized(a.provider)))
-   .map(s=>({id:s.id,plan:s.plan,status:s.status})),
-  active_plans:v.subscriptions.filter(s=>(s.account_email&&a.email&&s.account_email===a.email&&normalized(s.provider)===normalized(a.provider))
-    &&["Active","Trial"].includes(s.status)).length}));
+  plans:v.subscriptions.filter(s=>belongsToAccount(s,a))
+   .map(s=>({id:s.id,plan:s.plan,status:s.status,provider:s.provider})),
+  active_plans:v.subscriptions.filter(s=>belongsToAccount(s,a)&&
+    ["Active","Trial"].includes(s.status)).length}));
  const insights=localInsights(v);
  let result:any;
  if(route==="/")result={app:"SubMind",status:"ok",mode:"local"};
@@ -649,7 +726,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  else if(route==="/vault/dashboard")result={monthly_by_currency:insights.monthly_by_currency,active_subscriptions:insights.active_count,
   accounts:accounts.length,links:v.links.length,saved_plans:v.watchlist.length,needs_review:v.review_queue.length,
   renewals_30d:insights.renewals_30d,trials_ending:insights.trials_ending};
- else if(route==="/watchlist")result=v.watchlist;
+ else if(route==="/watchlist")result=v.watchlist.filter(x=>!["Moved to plans","Subscribed"].includes(String(x.status)));
  else if(route.startsWith("/watchlist/"))result=v.watchlist.find(x=>x.id===route.split("/")[2])||notFound();
  else if(route==="/deals/codes")result=v.promo_codes;
  else if(route==="/promo/sources")result=v.promo_sources;
