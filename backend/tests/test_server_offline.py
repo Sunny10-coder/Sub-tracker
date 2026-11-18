@@ -368,3 +368,22 @@ def test_inbox_ignore_is_idempotent_then_removable(client):
     assert second.status_code == 200 and second.json().get("already_handled") is True
     assert client.delete(f"/api/inbox/{iid}").status_code == 200
     assert client.get(f"/api/inbox/{iid}").status_code == 404
+
+
+def test_inbox_finding_can_be_removed_after_action_without_deleting_destination(client):
+    text = "From: Netflix <billing@netflix.com>\nTo: test@example.com\nSubject: Plan notice\nYour Netflix plan is available for USD 15 monthly."
+    created = client.post("/api/ingest/text", json={"text": text, "source": "manual"})
+    assert created.status_code == 200, created.text
+    entry = created.json()
+    item_id = entry["id"]
+    acted = client.post(f"/api/inbox/{item_id}/action", json={"action": "plan"})
+    assert acted.status_code == 200, acted.text
+    saved_id = acted.json().get("plan_id") or acted.json().get("ref")
+    assert saved_id
+    duplicate_action = client.post(f"/api/inbox/{item_id}/action", json={"action": "plan"})
+    assert duplicate_action.status_code == 409
+    removed = client.delete(f"/api/inbox/{item_id}")
+    assert removed.status_code == 200 and removed.json()["removed"] is True
+    assert client.get(f"/api/inbox/{item_id}").status_code == 404
+    assert item_id not in [i["id"] for i in client.get("/api/inbox?tab=all").json()]
+    assert saved_id in [p["id"] for p in client.get("/api/watchlist").json()]
