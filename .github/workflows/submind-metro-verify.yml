@@ -1,6 +1,7 @@
 name: SubMind Metro UI and lifecycle verification
 
 # Deliberately one-shot: ordinary code pushes do not trigger repeated CI jobs.
+# Re-run after corrected Instagram evidence-tagging syntax.
 on:
   push:
     branches:
