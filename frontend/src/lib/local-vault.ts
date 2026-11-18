@@ -13,9 +13,9 @@ export const LOCAL_VAULT_KEY = "submind.private.import.v1";
 type Dict = Record<string, any>;
 type Vault = { schema: string; subscriptions: Dict[]; accounts: Dict[]; watchlist: Dict[];
   promo_codes: Dict[]; mail_activity: Dict[]; review_queue: Dict[]; prompts: Dict[]; mailboxes: Dict[]; promo_sources: Dict[]; promo_findings: Dict[];
-  benefits: Dict[]; links: Dict[]; reminders: Dict[]; price_snapshots: Dict[]; smart_tasks: Dict[]; settings: Dict; imported_at?: string };
+  benefits: Dict[]; links: Dict[]; reminders: Dict[]; notes: Dict[]; price_snapshots: Dict[]; smart_tasks: Dict[]; settings: Dict; imported_at?: string };
 const EMPTY:Vault={schema:"submind-import-v1",subscriptions:[],accounts:[],watchlist:[],
- promo_codes:[],mail_activity:[],review_queue:[],prompts:[],mailboxes:[],promo_sources:[],promo_findings:[],benefits:[],links:[],reminders:[],price_snapshots:[],smart_tasks:[],
+ promo_codes:[],mail_activity:[],review_queue:[],prompts:[],mailboxes:[],promo_sources:[],promo_findings:[],benefits:[],links:[],reminders:[],notes:[],price_snapshots:[],smart_tasks:[],
  settings:{currency:"AED",ai_enabled:true,price_monitoring:false,auto_add_threshold:0.95}};
 
 function lower(s:any):string{return String(s||"").toLowerCase()}
@@ -24,7 +24,7 @@ function string(s:any):string{return typeof s==="string"?s.trim():""}
 function asArray(x:any):Dict[]{return Array.isArray(x)?x.filter(v=>v&&typeof v==="object"):[]}
 function copy(v:Vault):Vault{
  const merged={...EMPTY,...v,settings:{...EMPTY.settings,...v.settings}};
- for(const k of ["subscriptions","accounts","watchlist","promo_codes","mail_activity","review_queue","prompts","mailboxes","promo_sources","promo_findings","benefits","links","reminders","price_snapshots","smart_tasks"] as const) {
+ for(const k of ["subscriptions","accounts","watchlist","promo_codes","mail_activity","review_queue","prompts","mailboxes","promo_sources","promo_findings","benefits","links","reminders","notes","price_snapshots","smart_tasks"] as const) {
   (merged as any)[k]=asArray((v as any)[k]);
  }
  return merged;
@@ -117,6 +117,7 @@ export async function importPrivateBundle(data:any):Promise<{added:Dict;duplicat
    prompts:asArray(data.prompts).map((p,i)=>({...p,id:p.id||"prompt-import-"+i+"-"+normalized(p.title)})),
    links:asArray(data.links).map((l,i)=>({...l,id:l.id||"link-import-"+i+"-"+normalized(l.url)})),
    reminders:asArray(data.reminders).map((r,i)=>({...r,id:r.id||"rem-import-"+i})),
+   notes:asArray(data.notes).map((n,i)=>({...n,id:n.id||"note-import-"+i,body:string(n.body)})),
    mailboxes:asArray(data.mailboxes).map((m,i)=>({...m,id:m.id||"mailbox-"+normalized(m.email)||"mailbox-"+i})),
    promo_sources:asArray(data.promo_sources).map((s,i)=>({...s,id:s.id||"source-import-"+i+"-"+normalized(s.provider)})),
    promo_findings:asArray(data.promo_findings).map((f,i)=>({...f,id:f.id||"finding-import-"+i+"-"+normalized(f.source_url)}))
@@ -226,7 +227,23 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  const params=new URLSearchParams(qs||"");const data=jsonBody(opts);
  if(method!=="GET")return mutate(async()=>{const v=await getVault();let result:any=null;
    const collection=(name:keyof Vault)=>((v[name] as Dict[])||[]);
-   if(route==="/subscriptions/check-duplicate"&&method==="POST"){
+   if(route==="/notes"&&method==="POST"){
+      const body=string(data.body).slice(0,5000);
+      if(!body)throw Error("Write a note before saving.");
+      const title=(string(data.title)||body.split("\n")[0]).slice(0,100);
+      const note={id:"note-"+uid(),title,body,created_at:nowIso(),updated_at:nowIso()};
+      v.notes.unshift(note);result=note;
+   }else if(route.startsWith("/notes/")&&method==="PATCH"){
+      const id=route.split("/")[2],note=v.notes.find(n=>n.id===id);if(!note)notFound();
+      const body=string(data.body).slice(0,5000);
+      if(!body)throw Error("A note cannot be empty.");
+      Object.assign(note,{body,title:(string(data.title)||body.split("\n")[0]).slice(0,100),updated_at:nowIso()});
+      result=note;
+   }else if(route.startsWith("/notes/")&&method==="DELETE"){
+      const id=route.split("/")[2];
+      if(!v.notes.some(n=>n.id===id))notFound();
+      v.notes=v.notes.filter(n=>n.id!==id);result={ok:true};
+   }else if(route==="/subscriptions/check-duplicate"&&method==="POST"){
       const email=string(data.account_email).toLowerCase();
       const existing=email?v.subscriptions.find(x=>normalized(x.provider)===normalized(data.provider)
         &&normalized(x.plan)===normalized(data.plan)&&string(x.account_email).toLowerCase()===email):undefined;
@@ -759,6 +776,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  else if(route==="/deals/codes")result=v.promo_codes;
  else if(route==="/promo/sources")result=v.promo_sources;
  else if(route==="/promo/findings")result=v.promo_findings;
+ else if(route==="/notes")result=[...v.notes].sort((a,b)=>String(b.updated_at||"").localeCompare(String(a.updated_at||"")));
  else if(route==="/prompts")result=v.prompts;
  else if(route.startsWith("/prompts/"))result=v.prompts.find(x=>x.id===route.split("/")[2])||notFound();
  else if(route==="/mailboxes")result=v.mailboxes;
