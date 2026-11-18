@@ -582,6 +582,10 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
       const id=route.split("/")[2],entry=v.review_queue.find(x=>x.id===id&&!x.deleted_at);
       if(!entry)notFound();
+      if(string(entry.status)==="ignored"&&["ignore","dismiss"].includes(string(data.action))){
+        result={ok:true,status:"ignored",already_handled:true};
+        await save(v);return result as T;
+      }
       if(!["needs_review","pending","needs_confirmation","duplicate"].includes(string(entry.status)))
          throw Error("This finding was already processed. Use Remove to clear it from Inbox; saved records are kept.");
       const action=string(data.action),ex={...(entry.extraction||{}),...(data.edits||{})};
