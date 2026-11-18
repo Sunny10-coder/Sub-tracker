@@ -31,6 +31,17 @@ export default function SubscriptionDetail() {
   const setPromo = (v: string) => setDraft((d) => ({ ...d, promo: v }));
 
   const patch = useMutation({ mutationFn: (b: any) => api.updateSubscription(id!, b), onSuccess: () => { setDraft({}); refetch(); invalidate(); } });
+  const changeStatus = (status:string) => {
+    if(status===data?.status||patch.isPending)return;
+    if(status==="Cancelled"){
+      Alert.alert("Confirm provider cancellation",
+        "Mark cancelled only after the provider confirms it. SubMind does not cancel your external subscription. Plan and payment history will remain in Accounts.",
+        [{text:"Not yet",style:"cancel"},{text:"Provider confirmed",onPress:()=>patch.mutate({status:"Cancelled",auto_renew:false})}]);
+    }else if(status==="Expired"){
+      Alert.alert("Mark as expired","This moves the plan to Accounts history and stops its renewal alerts.",
+        [{text:"Keep current",style:"cancel"},{text:"Mark expired",onPress:()=>patch.mutate({status:"Expired",auto_renew:false})}]);
+    }else patch.mutate({status});
+  };
   const del = useMutation({ mutationFn: () => api.deleteSubscription(id!), onSuccess: () => { invalidate(); router.back(); } });
 
   if (isLoading || !data) return <View style={styles.container}><AppHeader title="Subscription" back /><Loading /></View>;
@@ -92,9 +103,19 @@ export default function SubscriptionDetail() {
 
         <Text style={styles.sectionLabel}>Status</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {STATUSES.map((st) => <Chip key={st} label={st} active={s.status === st} onPress={() => patch.mutate({ status: st })} testID={`status-${st}`} />)}
+          {STATUSES.map((st) => <Chip key={st} label={st} active={s.status === st} onPress={() => changeStatus(st)} testID={`status-${st}`} />)}
         </ScrollView>
 
+        {["Cancelled","Expired"].includes(s.status) ? (
+          <Card>
+            <Text style={styles.sectionLabel}>Saved to Accounts history</Text>
+            <Text style={styles.notes}>Plan and payment records remain accessible.
+              {s.cancellation_date ? " Cancellation recorded on "+formatDate(s.cancellation_date)+"." : ""}
+              {" "}Changes here do not cancel a provider account or process a refund.</Text>
+            <PrimaryButton title="Open Accounts history" icon="account-multiple-outline" variant="secondary"
+              onPress={() => router.push("/accounts")} />
+          </Card>
+        ) : null}
         {s.notes ? <Card><Text style={styles.notes}>{s.notes}</Text></Card> : null}
 
         {s.payments?.length ? (

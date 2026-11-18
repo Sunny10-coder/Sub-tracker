@@ -9,7 +9,7 @@ import { AppHeader, Badge, Card, CategoryDot, ChipRow, EmptyState, Loading, Prim
 import { makeStyles, useTheme } from "@/src/theme";
 import { TAB_BAR_SPACE } from "./_layout";
 
-const FILTERS = ["All", "Active", "Trial", "Paused"];
+const FILTERS = ["Current", "Active", "Trial", "Paused"];
 
 const statusTone: any = { Active: "success", Trial: "mint", Paused: "warning", Cancelled: "error", Expired: "muted", Unknown: "muted" };
 
@@ -18,14 +18,14 @@ export default function Subscriptions() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [filter, setFilter] = useState("All");
-  const { data, isLoading, isFetching, refetch } = useSubscriptions(filter === "All" ? undefined : filter);
+  const [filter, setFilter] = useState("Current");
+  const { data, isLoading, isFetching, refetch } = useSubscriptions(filter === "Current" ? undefined : filter);
 
   return (
     <View style={styles.container}>
       <AppHeader
         title="Subscriptions"
-        subtitle={data ? `${data.length} ${filter !== "All" ? filter.toLowerCase() : "current"} plans · cancelled/expired plans are in Accounts` : undefined}
+        subtitle={data ? `${data.length} ${filter !== "Current" ? filter.toLowerCase() : "current"} plans · cancelled/expired plans are in Accounts` : undefined}
       />
       <ChipRow items={FILTERS} value={filter} onChange={setFilter} testIDPrefix="sub-filter" />
 

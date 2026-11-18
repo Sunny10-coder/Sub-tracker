@@ -31,7 +31,7 @@ export default function Watchlist() {
         <Loading />
       ) : (
         <FlatList
-          data={data || []}
+          data={(data || []).filter((p:any)=>!["Subscribed","Moved to plans"].includes(String(p.status)))}
           keyExtractor={(i) => i.id}
           contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 100, gap: 12 }}
           showsVerticalScrollIndicator={false}
@@ -58,7 +58,8 @@ export default function Watchlist() {
                     <Icon name={sel ? "check" : "scale-balance"} size={15} color={sel ? colors.onBrandPrimary : colors.brandPrimary} />
                     <Text style={[styles.actText, sel && { color: colors.onBrandPrimary }]}>{sel ? "Selected" : "Compare"}</Text>
                   </Pressable>
-                  <Pressable onPress={() => convert.mutate(item.id)} style={styles.act}>
+                  <Pressable onPress={() => !convert.isPending && convert.mutate(item.id)} style={styles.act}
+                    disabled={convert.isPending} accessibilityRole="button" accessibilityLabel={`Move ${item.provider} to subscriptions`}>
                     <Icon name="arrow-up-bold-box-outline" size={15} color={colors.brandSecondary} />
                     <Text style={[styles.actText, { color: colors.brandSecondary }]}>Move to plans</Text>
                   </Pressable>

@@ -73,6 +73,9 @@ function belongsToAccount(sub:Dict,account:Dict):boolean{
 }
 function connectAccount(v:Vault,sub:Dict,createIfMissing=false):void{
  let account=accountFor(v,sub);
+ const email=string(sub.account_email).toLowerCase();
+ if(account&&(normalized(account.provider)!==normalized(sub.provider)||
+   (email&&string(account.email).toLowerCase()!==email)))account=undefined;
  if(!account&&createIfMissing){
    account=normalizeAccount({id:"acct-"+uid(),provider:sub.provider,email:string(sub.account_email),
      status:"Needs confirmation",source_subscription_id:sub.id,created_at:nowIso()});
@@ -263,7 +266,10 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else if(route==="/accounts"&&method==="POST"){
       const rec=normalizeAccount({...data,id:"acct-"+uid()});
       if(!rec.provider||rec.provider==="Unknown")throw Error("Account provider is required");
-      if(v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&string(a.email).toLowerCase()===string(rec.email).toLowerCase()))throw Error("409: This provider and sign-in email are already saved");
+      if(v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&
+        string(a.email).toLowerCase()===string(rec.email).toLowerCase()&&
+        (!!rec.email||String(a.source_subscription_id||"")===String(rec.source_subscription_id||""))))
+        throw Error("409: This provider account is already saved");
       v.accounts.unshift(rec);
       if(rec.email)for(const sub of v.subscriptions)
         if(!sub.account_id&&normalized(sub.provider)===normalized(rec.provider)&&
