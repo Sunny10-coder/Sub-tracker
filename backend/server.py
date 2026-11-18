@@ -296,18 +296,31 @@ def _minus_days(iso: Optional[str], n: int) -> Optional[str]:
 
 
 async def _find_duplicate(extraction: dict) -> Optional[dict]:
-    prov = extraction.get("provider", "").strip().lower()
-    prod = extraction.get("product", "").strip().lower()
-    if not prov and not prod:
+    """Avoid merging distinct accounts belonging to the same provider."""
+    def norm(value):
+        return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+    provider = norm(extraction.get("provider") or extraction.get("product"))
+    if not provider:
         return None
+    email = str(extraction.get("account_email") or "").strip().lower()
+    plan = norm(extraction.get("plan"))
+    kind = str(extraction.get("content_type") or "").lower()
     subs = await db.subscriptions.find(await base_query()).to_list(500)
-    for sub in subs:
-        sp = (sub.get("provider") or "").strip().lower()
-        spr = (sub.get("product") or "").strip().lower()
-        if prov and sp and prov == sp:
-            return clean(sub)
-        if prod and spr and prod == spr:
-            return clean(sub)
+    candidates = [s for s in subs if norm(s.get("provider")) == provider]
+    def compatible(item):
+        saved_plan = norm(item.get("plan"))
+        return not plan or not saved_plan or saved_plan == plan
+    if email:
+        matching = [s for s in candidates if compatible(s) and
+                    str(s.get("account_email") or "").strip().lower() == email]
+        if len(matching) == 1:
+            return clean(matching[0])
+        # Legacy records with no email can match a single cancellation notice.
+        if kind == "cancelled" and len(candidates) == 1 and compatible(candidates[0]) and not candidates[0].get("account_email"):
+            return clean(candidates[0])
+        return None
+    if len(candidates) == 1 and compatible(candidates[0]):
+        return clean(candidates[0])
     return None
 
 
@@ -822,8 +835,7 @@ async def inbox_action(item_id: str, body: InboxAction):
         if ex.get("content_type") == "cancelled":
             upd["status"] = "Cancelled"
             upd["cancellation_date"] = date.today().isoformat()
-        upd["updated_at"] = now_iso()
-        await db.subscriptions.update_one({"id": body.merge_into, "user_id": USER_ID}, {"$set": upd})
+        await _patch_subscription_record(body.merge_into, upd)
         await db.smart_inbox.update_one({"id": item_id}, {"$set": {"status": "merged"}})
         return {"ok": True, "status": "merged", "subscription_id": body.merge_into}
 
@@ -910,20 +922,58 @@ async def create_subscription(body: Dict[str, Any]):
     return clean(doc)
 
 
-@api.patch("/subscriptions/{sid}")
-async def update_subscription(sid: str, body: Dict[str, Any]):
-    doc = await db.subscriptions.find_one({"id": sid, "user_id": USER_ID})
+async def _patch_subscription_record(sid: str, changes: Dict[str, Any]) -> dict:
+    doc = await db.subscriptions.find_one({"id": sid, "user_id": USER_ID, "deleted_at": None})
     if not doc:
-        raise HTTPException(404, "Not found")
-    body.pop("id", None); body.pop("_id", None); body.pop("user_id", None)
+        raise HTTPException(404, "Subscription not found")
+    body = dict(changes)
+    for protected in ("id", "_id", "user_id", "deleted_at", "created_at", "status_history", "payments"):
+        body.pop(protected, None)
+    allowed = ("Active", "Trial", "Paused", "Cancelled", "Expired", "Unknown")
+    if "status" in body and body["status"] not in allowed:
+        raise HTTPException(422, "Invalid subscription status")
+    old = str(doc.get("status") or "Unknown")
+    new = str(body.get("status", old))
+    if "account_email" in body:
+        body["account_email"] = str(body["account_email"] or "").strip().lower()
     if "price" in body and body["price"] != doc.get("price"):
-        hist = doc.get("price_history", [])
+        hist = list(doc.get("price_history") or [])
         hist.append({"price": doc.get("price"), "date": now_iso()})
         body["price_history"] = hist
+    if new in ("Cancelled", "Expired"):
+        body["auto_renew"] = False
+        if new == "Cancelled" and old != new:
+            body["cancellation_date"] = body.get("cancellation_date") or date.today().isoformat()
+        if new == "Expired" and old != new:
+            body["ended_at"] = now_iso()
+    elif old in ("Cancelled", "Expired") and new != old:
+        body.setdefault("cancellation_date", None)
+        body.setdefault("ended_at", None)
+    if old != new:
+        hist = list(doc.get("status_history") or [])
+        hist.append({"from": old, "to": new, "at": now_iso()})
+        body["status_history"] = hist
     body["updated_at"] = now_iso()
-    await db.subscriptions.update_one({"id": sid}, {"$set": body})
-    updated = await db.subscriptions.find_one({"id": sid})
-    return clean(updated)
+    await db.subscriptions.update_one({"id": sid, "user_id": USER_ID, "deleted_at": None}, {"$set": body})
+    kinds = {"$in": ["renewal", "trial_ending"]}
+    if new in ("Cancelled", "Expired", "Paused") or body.get("auto_renew") is False:
+        await db.reminders.update_many(
+            {"user_id": USER_ID, "deleted_at": None, "ref_type": "subscription", "ref_id": sid, "kind": kinds},
+            {"$set": {"completed": True, "completed_reason": "subscription_inactive", "updated_at": now_iso()}})
+    elif old != new or any(k in body for k in ("renewal_date", "trial_end", "auto_renew")):
+        await db.reminders.update_many(
+            {"user_id": USER_ID, "deleted_at": None, "ref_type": "subscription", "ref_id": sid, "kind": kinds},
+            {"$set": {"completed": True, "completed_reason": "renewal_updated", "updated_at": now_iso()}})
+        updated = await db.subscriptions.find_one({"id": sid, "user_id": USER_ID})
+        reminder = _reminder_from(updated, "subscription", sid)
+        if reminder and str(reminder.get("due_date") or "") >= date.today().isoformat():
+            await db.reminders.insert_one(dict(reminder))
+    return clean(await db.subscriptions.find_one({"id": sid, "user_id": USER_ID}))
+
+
+@api.patch("/subscriptions/{sid}")
+async def update_subscription(sid: str, body: Dict[str, Any]):
+    return await _patch_subscription_record(sid, body)
 
 
 @api.post("/subscriptions/{sid}/payment")
