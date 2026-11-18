@@ -169,9 +169,10 @@ export const api = {
     const key=(v:any)=>String(v||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
     return accounts.map(account=>{
       const accountEmail=String(account.email||"").trim().toLowerCase();
-      const linked=accountEmail?subs.filter((sub:any)=>
-        key(sub.provider)===key(account.provider) &&
-        String(sub.account_email||"").trim().toLowerCase()===accountEmail):[];
+      const linked=subs.filter((sub:any)=>String(sub.account_id||"")===String(account.id) ||
+        (Boolean(account.source_subscription_id) && String(account.source_subscription_id)===String(sub.id)) ||
+        (!sub.account_id && !!accountEmail && key(sub.provider)===key(account.provider) &&
+        String(sub.account_email||"").trim().toLowerCase()===accountEmail));
       return {...account,plans:linked.map((sub:any)=>({id:sub.id,plan:sub.plan,status:sub.status}))};
     });
   },
@@ -182,8 +183,10 @@ export const api = {
     const record=await localRequest<any>("/accounts/"+encodeURIComponent(id));
     const plans=await api.allSubscriptionHistory().catch(()=>[]);
     const same=(x:any)=>String(x.provider||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-    return {...record,plans:plans.filter((x:any)=>Boolean(String(record.email||"").trim())&&same(x)===same(record)&&
-      String(x.account_email||"").toLowerCase()===String(record.email||"").toLowerCase())
+    return {...record,plans:plans.filter((x:any)=>String(x.account_id||"")===String(record.id) ||
+      (Boolean(record.source_subscription_id)&&String(x.id)===String(record.source_subscription_id)) ||
+      (!x.account_id && Boolean(String(record.email||"").trim())&&same(x)===same(record)&&
+      String(x.account_email||"").toLowerCase()===String(record.email||"").toLowerCase()))
       .map((x:any)=>({id:x.id,plan:x.plan,status:x.status}))};
   },
   updateAccount: (id:string,b:any) => localRequest<any>("/accounts/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify(b)}),
@@ -240,6 +243,19 @@ export const api = {
   updateSubscription: async (id:string,b:any) => {
     const updated=await req<any>(`/subscriptions/${id}`,{method:"PATCH",body:JSON.stringify(b)});
     if(["cancelled","expired"].includes(String(b.status||"").toLowerCase())){
+      // A server-owned subscription needs a local reference so the Accounts
+      // screen remains useful even if its registration details are incomplete.
+      const existing=await localRequest<any[]>("/accounts").catch(()=>[]);
+      const provider=String(updated.provider||"").trim();
+      const email=String(updated.account_email||"").trim().toLowerCase();
+      const normalize=(x:string)=>x.toLowerCase().replace(/[^a-z0-9]/g,"");
+      if(provider&&!existing.some((a:any)=>a.source_subscription_id===id||
+        (email&&normalize(String(a.provider||""))===normalize(provider)&&
+         String(a.email||"").trim().toLowerCase()===email))){
+        await localRequest<any>("/accounts",{method:"POST",body:JSON.stringify({
+          provider,email,status:"Needs confirmation",source_subscription_id:id
+        })}).catch(()=>undefined);
+      }
       // Existing records and payment history remain intact. Only visibility changes.
       const { syncReminderNotifications }=await import("@/src/lib/notify");
       const upcoming=await api.reminders().catch(()=>[]);
@@ -425,7 +441,7 @@ export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api
 export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
-    ["insights", "subscriptions", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "smart-overview", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
+    ["insights", "subscriptions", "subscription", "account", "inbox", "links", "linkTags", "watchlist", "reminders", "graph", "memory", "inboxItem", "link", "smart-overview", "local-accounts", "archived-subscriptions", "local-vault-dashboard", "local-prompts", "local-mailboxes", "local-review", "local-promos", "local-sources", "local-findings", "local-price-history", "local-link-reminder"].forEach((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     );
 }
