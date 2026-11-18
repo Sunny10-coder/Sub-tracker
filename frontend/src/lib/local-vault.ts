@@ -261,6 +261,26 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       }else if(["Cancelled","Expired"].includes(previousStatus)){
         next.cancellation_date=null;next.ended_at=null;
       }
+      if(!["Cancelled","Expired"].includes(next.status)&&
+         (previousStatus!==next.status||"renewal_date" in data||"trial_end" in data||"auto_renew" in data)){
+        for(const reminder of v.reminders){
+          if(string(reminder.ref_id)===id&&string(reminder.ref_type)==="subscription"&&
+            ["renewal","trial_ending","subscription"].includes(string(reminder.kind))&&!reminder.completed){
+            reminder.completed=true;reminder.completed_reason="renewal_updated";
+          }
+        }
+        const due=next.status==="Trial"?(next.trial_end||next.renewal_date):next.renewal_date;
+        if(next.auto_renew===true&&["Active","Trial"].includes(next.status)&&futureDays(due)!==null&&futureDays(due)!>=0){
+          const reminderDate=new Date(String(due).slice(0,10)+"T12:00:00");
+          const notice=Math.max(1,Math.min(30,Number(v.settings.cancel_notice_days)||3));
+          reminderDate.setDate(reminderDate.getDate()-notice);
+          const remindDay=[reminderDate.getFullYear(),String(reminderDate.getMonth()+1).padStart(2,"0"),String(reminderDate.getDate()).padStart(2,"0")].join("-");
+          v.reminders.unshift({id:"rem-"+uid(),ref_type:"subscription",ref_id:id,
+            kind:next.status==="Trial"?"trial_ending":"renewal",completed:false,
+            title:(next.status==="Trial"?"Trial ending: ":"Review renewal: ")+String(next.provider),
+            due_date:remindDay,created_at:nowIso()});
+        }
+      }
       Object.assign(x,next,{updated_at:nowIso()});result=x;
    }else if(route.startsWith("/subscriptions/")&&method==="DELETE"){
       const id=route.split("/")[2];v.subscriptions=v.subscriptions.filter(x=>x.id!==id);result={ok:true};

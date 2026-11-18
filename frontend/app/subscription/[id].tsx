@@ -105,6 +105,19 @@ export default function SubscriptionDetail() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {STATUSES.map((st) => <Chip key={st} label={st} active={s.status === st} onPress={() => changeStatus(st)} testID={`status-${st}`} />)}
         </ScrollView>
+        {["Active","Trial","Paused"].includes(s.status) ? (
+          <Card>
+            <Text style={styles.sectionLabel}>Provider auto-renewal</Text>
+            <Text style={styles.notes}>{s.auto_renew === true ? "Marked as enabled" :
+              s.auto_renew === false ? "Marked as disabled" : "Not confirmed"}. This only records the provider setting; it cannot change billing on the provider website.</Text>
+            <PrimaryButton title={s.auto_renew === true ? "Mark auto-renew disabled" : "Confirm auto-renew enabled"}
+              variant="secondary" icon="calendar-refresh" loading={patch.isPending}
+              onPress={() => Alert.alert("Confirm provider billing setting",
+                "Have you checked this setting with the provider? SubMind will only update your local record and reminders.",
+                [{text:"Not yet",style:"cancel"},{text:"Confirm",onPress:()=>patch.mutate({auto_renew:s.auto_renew !== true})}])}
+              testID="confirm-auto-renew" />
+          </Card>
+        ) : null}
 
         {["Cancelled","Expired"].includes(s.status) ? (
           <Card>

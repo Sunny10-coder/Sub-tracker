@@ -112,7 +112,8 @@ export default function Start() {
               onPress={go("/(tabs)/subscriptions")} testID="tile-subscriptions" delay={550}
               faces={[
                 <View key="active"><TileBig>{activeCount}</TileBig><TileLine>active and trial plans</TileLine></View>,
-                <View key="monthly"><TileLine strong>{money(ins.data?.monthly_spend, cur)}</TileLine><TileLine>monthly spending in {cur}</TileLine></View>,
+                <View key="monthly"><TileLine strong>{money(ins.data?.monthly_spend, cur)}</TileLine>
+                  <TileLine>{ins.data?.spend_is_partial ? "monthly in "+cur+" · other currencies in Insights" : "monthly spending in "+cur}</TileLine></View>,
                 <View key="renew"><TileBig>{renewalsCount}</TileBig><TileLine>renewals within 30 days</TileLine></View>,
               ]} />
             <Tile title="accounts" icon="account-multiple-outline" color={colors.accentGreen}

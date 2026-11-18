@@ -238,9 +238,10 @@ export const api = {
     if(!provider)throw Error("Provider is required.");
     const norm=(x:any)=>String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"");
     const existing=await api.subscriptions();
-    const match=existing.find((x:any)=>norm(x.provider)===norm(provider)&&
+    const email=String(b.account_email||"").trim().toLowerCase();
+    const match=email?existing.find((x:any)=>norm(x.provider)===norm(provider)&&
       norm(x.plan)===norm(b.plan)&&
-      String(x.account_email||"").trim().toLowerCase()===String(b.account_email||"").trim().toLowerCase());
+      String(x.account_email||"").trim().toLowerCase()===email):undefined;
     if(match)throw Error("This provider, plan and sign-in email are already saved. Open the existing subscription instead of creating a duplicate.");
     return req<any>("/subscriptions",{method:"POST",body:JSON.stringify(b)});
   },
