@@ -569,7 +569,8 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
    }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
       const id=route.split("/")[2],entry=v.review_queue.find(x=>x.id===id);
       if(!entry)notFound();
-      if(!["needs_review","pending"].includes(string(entry.status)))throw Error("This finding has already been handled.");
+      if(!["needs_review","pending","needs_confirmation","duplicate"].includes(string(entry.status)))
+         throw Error("This finding has already been handled.");
       const action=string(data.action),ex={...(entry.extraction||{}),...(data.edits||{})};
       const provider=string(ex.provider),email=string(ex.account_email||entry.mailbox_email||entry.source_to).toLowerCase();
       let recordId:string|undefined;
@@ -797,7 +798,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  else if(route==="/inbox"){
     const tab=lower(params.get("tab")||"needs_review");
     result=v.review_queue.filter(x=>
-      tab==="all"||(tab==="needs_review"?["needs_review","pending"].includes(string(x.status)):
+      tab==="all"||(tab==="needs_review"?["needs_review","pending","needs_confirmation","duplicate"].includes(string(x.status)):
       tab==="auto_added"?["auto_added","added","approved"].includes(string(x.status)):
       tab==="duplicates"?["duplicate","merged"].includes(string(x.status)):lower(x.status)===tab));
  }else if(route.startsWith("/inbox/")){

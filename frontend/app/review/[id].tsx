@@ -38,7 +38,7 @@ export default function Review() {
 
   const done = () => { invalidate(); router.back(); };
   const act = useMutation({
-    mutationFn: (action: string) => api.inboxAction(id!, { action, edits: f }),
+    mutationFn: (action: string) => api.inboxAction(id!, { action, edits }),
     onSuccess: done,
   });
   const rescan = useMutation({ mutationFn: () => api.inboxReanalyze(id!), onSuccess: () => { refetch(); invalidate(); } });
@@ -50,12 +50,12 @@ export default function Review() {
   const doubts: string[] = data.doubts || ex.doubts || [];
   const suggested: string = data.suggested_destination || ex.suggested_destination || "";
   const busy = act.isPending;
-  const processed = ["added", "ignored", "merged", "saved"].includes(data.status);
+  const processed = ["added", "ignored", "merged", "saved", "auto_added"].includes(data.status);
   const verifiedKeys = Object.keys(ver).filter((k) => ver[k]);
 
   return (
     <View style={styles.container}>
-      <AppHeader title="Review" subtitle={`${data.source} · ${Math.round((data.confidence || 0) * 100)}% match`} back />
+      <AppHeader title="Review" subtitle={`${data.source || data.source_subject || data.mailbox_email || "saved finding"} · ${Math.round((data.confidence || 0) * 100)}% match`} back />
       <FormScroll>
         {doubts.length ? (
           <Card style={styles.note}>
@@ -112,7 +112,9 @@ export default function Review() {
             <PrimaryButton title="Ignore" icon="close" variant="secondary" onPress={() => act.mutate("ignore")} disabled={busy} style={{ flex: 1 }} testID="rv-ignore" />
           </View>
           {!f.provider ? <Text style={styles.fine}>Enter the provider above to add it as an account or plan.</Text> : null}
-          {act.isError ? <Text style={[styles.fine, { color: colors.error }]}>Could not save. Check your server connection and try again.</Text> : null}
+          {act.isError ? <Text style={[styles.fine, { color: colors.error }]} testID="review-save-error">
+            {String((act.error as Error)?.message||"Could not save. The record remains in Review.")}
+          </Text> : null}
         </View>
       )}
     </View>
