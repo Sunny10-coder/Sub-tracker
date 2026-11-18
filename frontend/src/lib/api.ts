@@ -276,6 +276,7 @@ export const api = {
   inboxItem: (id: string) => req<any>(`/inbox/${id}`),
   inboxReanalyze: (id: string) => req<any>(`/inbox/${id}/reanalyze`, { method: "POST" }),
   inboxAction: (id: string, b: any) => req<any>(`/inbox/${id}/action`, { method: "POST", body: JSON.stringify(b) }),
+  removeInbox: (id: string) => req<any>(`/inbox/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   links: (source?: string) => req<any[]>(`/links${source && source !== "All" ? `?source=${encodeURIComponent(source)}` : ""}`),
   linkTags: () => localRequest<{ tag: string; count: number }[]>("/links/tags"),
