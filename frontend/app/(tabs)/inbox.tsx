@@ -22,7 +22,7 @@ const STATUS_LABEL: Record<string, string> = {
   duplicate: "Duplicate", added: "Added", ignored: "Ignored", merged: "Merged", saved: "Saved",
 };
 
-const PROCESSED = ["added", "ignored", "merged", "saved"];
+const PROCESSED = ["added", "ignored", "merged", "saved", "auto_added"];
 
 export default function Inbox() {
   const styles = useStyles();

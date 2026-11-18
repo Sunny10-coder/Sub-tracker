@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/submind_widget_root"
+    android:orientation="vertical"
+    android:background="#050505"
+    android:padding="7dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+  <LinearLayout android:id="@+id/submind_widget_header"
+      android:orientation="horizontal" android:gravity="center_vertical"
+      android:paddingHorizontal="8dp" android:paddingVertical="5dp"
+      android:layout_width="match_parent" android:layout_height="wrap_content">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="S U B M I N D" android:textColor="#FFFFFF"
+        android:textStyle="bold" android:textSize="16sp"/>
+  </LinearLayout>
+
+  <LinearLayout android:id="@+id/submind_widget_expiring"
+      android:orientation="vertical" android:padding="10dp"
+      android:layout_marginTop="4dp" android:background="#6400DA"
+      android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+    <TextView android:id="@+id/submind_expiring_count"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:singleLine="true" android:text="SUBSCRIPTIONS EXPIRING" android:textColor="#F0E3FF"
+        android:textStyle="bold" android:textSize="11sp"/>
+    <TextView android:id="@+id/submind_expiring_title"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:ellipsize="end" android:maxLines="1"
+        android:text="Nothing expiring soon" android:textColor="#FFFFFF"
+        android:textStyle="bold" android:textSize="16sp"/>
+    <TextView android:id="@+id/submind_expiring_when"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:ellipsize="end" android:maxLines="1"
+        android:text="Open SubMind to refresh" android:textColor="#EFE3FF" android:textSize="11sp"/>
+  </LinearLayout>
+
+  <LinearLayout android:id="@+id/submind_widget_notes"
+      android:orientation="vertical" android:padding="10dp"
+      android:layout_marginTop="4dp" android:background="#007DB4"
+      android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+    <TextView android:id="@+id/submind_notes_count"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="NOTES" android:textColor="#E6F8FF"
+        android:textStyle="bold" android:textSize="11sp"/>
+    <TextView android:id="@+id/submind_notes_title"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:ellipsize="end" android:maxLines="2"
+        android:text="Add your first note" android:textColor="#FFFFFF"
+        android:textStyle="bold" android:textSize="15sp"/>
+  </LinearLayout>
+
+  <LinearLayout android:id="@+id/submind_widget_links"
+      android:orientation="vertical" android:padding="10dp"
+      android:layout_marginTop="4dp" android:background="#078C15"
+      android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+    <TextView android:id="@+id/submind_links_count"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="REMINDER LINKS" android:textColor="#E8FFEB"
+        android:textStyle="bold" android:textSize="11sp"/>
+    <TextView android:id="@+id/submind_links_title"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:ellipsize="end" android:maxLines="1"
+        android:text="No links with reminders" android:textColor="#FFFFFF"
+        android:textStyle="bold" android:textSize="15sp"/>
+    <TextView android:id="@+id/submind_links_when"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:ellipsize="end" android:maxLines="1"
+        android:text="Open SubMind to refresh" android:textColor="#E8FFEB" android:textSize="11sp"/>
+  </LinearLayout>
+</LinearLayout>

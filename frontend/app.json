@@ -28,7 +28,7 @@
         "READ_MEDIA_IMAGES",
         "POST_NOTIFICATIONS"
       ],
-      "versionCode": 9
+      "versionCode": 10
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +36,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./plugins/withSubMindAndroidWidget",
       "expo-router",
       "expo-notifications",
       [
