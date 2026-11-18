@@ -240,7 +240,7 @@ export async function analyzePublicLink(record:Record<string,any>,useAI=true):Pr
    [source.description,source.excerpt].filter(Boolean).join(" "):
    [source.title,source.description,source.excerpt].filter(Boolean).join(" ");
  const ai=useAI?await optionalAI(source):null;
- const tags=unique([...(Array.isArray(record.tags)?record.tags:[]),...
+ const tags=unique([...(Array.isArray(record.tags)?record.tags:[]),
    ...(source.kind==="instagram"?instagramEvidenceTags(evidence):
      inferTags(evidence||String(record.url||""),base.tags||[])),
    ...list(source.tags,14),...list(ai?.tags,9).map(x=>x.toLowerCase())]).slice(0,16);
