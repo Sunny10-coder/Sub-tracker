@@ -1,6 +1,6 @@
 name: SubMind Metro Android 11 Inbox and Deadline APK
 
-# Android build 10: Metro 3-section launcher widget, notes, review save fixes.
+# Android build 11: Subscription deadlines and Inbox removal (verified source).
 
 on:
   push:
