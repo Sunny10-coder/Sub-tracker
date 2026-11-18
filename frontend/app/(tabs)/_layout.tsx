@@ -15,7 +15,7 @@ type TabMeta = { icon: string; iconActive: string; label: string };
 
 const TAB_META: Record<string, TabMeta> = {
   index: { icon: "home-outline", iconActive: "home", label: "start" },
-  subscriptions: { icon: "wallet-outline", iconActive: "wallet", label: "accounts" },
+  subscriptions: { icon: "wallet-outline", iconActive: "wallet", label: "plans" },
   inbox: { icon: "inbox-arrow-down-outline", iconActive: "inbox-arrow-down", label: "inbox" },
   ai: { icon: "robot-happy-outline", iconActive: "robot-happy", label: "ask ai" },
 };
@@ -94,7 +94,7 @@ export default function TabsLayout() {
       .filter((sub:any)=>sub.auto_renew!==false)
       .map((sub:any)=>{
         const deadline=String(sub.status==="Trial"?sub.trial_end||sub.renewal_date:sub.renewal_date||"").slice(0,10);
-        if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(deadline))return null;
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(deadline))return null;
         const d=new Date(deadline+"T12:00:00");
         if(Number.isNaN(d.getTime()))return null;
         d.setDate(d.getDate()-lead);

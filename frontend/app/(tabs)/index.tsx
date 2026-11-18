@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TAB_BAR_SPACE } from "./_layout";
-import { useInbox, useInsights, useLinks, useMemory, useReminders, useWatchlist, useSubscriptions, useAccounts } from "@/src/lib/api";
+import { useInbox, useInsights, useLinks, useMemory, useReminders, useWatchlist, useSubscriptions, useAccounts, useArchivedSubscriptions } from "@/src/lib/api";
 import { cancelByLabel, formatDate, money } from "@/src/lib/format";
 import { Icon, Loading, SectionLabel } from "@/src/components/ui";
 import { Tile, TileBig, TileLine, TileMid, useTileSize } from "@/src/components/tiles";
@@ -17,23 +17,10 @@ const AI_PROMPTS = [
 ];
 
 const SMALL_TILES = [
-  { icon: "brain", label: "smart companion", href: "/smart-companion", key: "accentGreen" },
-  { icon: "eye-check", label: "plans", href: "/watchlist", key: "accentBlue" },
-  { icon: "chart-donut", label: "insights", href: "/insights", key: "accentGreen" },
-  { icon: "graph", label: "brain map", href: "/tool-brain", key: "accentPurple" },
   { icon: "magnify", label: "search", href: "/search", key: "accentOrange" },
   { icon: "camera", label: "scan", href: "/scan?mode=camera", key: "accentRed" },
-  { icon: "link-variant", label: "paste link", href: "/paste-link", key: "accentPink" },
-  { icon: "email-plus-outline", label: "paste email", href: "/add-email", key: "accentYellow" },
-  { icon: "cog", label: "settings", href: "/settings", key: "accentBlue" },
-  { icon: "gmail", label: "gmail sync", href: "/gmail-sync", key: "accentPurple" },
-  { icon: "key-variant", label: "ai models", href: "/api-keys", key: "accentBlue" },
-  { icon: "account-multiple-outline", label: "accounts", href: "/accounts", key: "accentGreen" },
-  { icon: "tag-multiple", label: "offers", href: "/promo-vault", key: "accentOrange" },
-  { icon: "text-box-multiple", label: "prompts", href: "/prompt-vault", key: "accentPink" },
-  { icon: "inbox-arrow-down", label: "review mail", href: "/mail-review", key: "accentRed" },
-  { icon: "file-import", label: "import", href: "/import-data", key: "accentYellow" },
-  { icon: "database-export", label: "backup", href: "/export-data", key: "accentBlue" },
+  { icon: "link-variant", label: "save link", href: "/paste-link", key: "accentPink" },
+  { icon: "apps", label: "more tools", href: "/restored-tools", key: "accentYellow" },
 ] as const;
 
 function greeting() {
@@ -56,10 +43,11 @@ export default function Start() {
   const watch = useWatchlist();
   const currentPlans=useSubscriptions();
   const serviceAccounts=useAccounts();
+  const history=useArchivedSubscriptions();
   const rems = useReminders();
 
   const go = (href: string) => () => router.push(href as never);
-  const refetchAll = () => { ins.refetch(); mem.refetch(); review.refetch(); links.refetch(); watch.refetch(); currentPlans.refetch(); serviceAccounts.refetch(); rems.refetch(); };
+  const refetchAll = () => { ins.refetch(); mem.refetch(); review.refetch(); links.refetch(); watch.refetch(); currentPlans.refetch(); serviceAccounts.refetch(); history.refetch(); rems.refetch(); };
   const refreshing = ins.isFetching || mem.isFetching;
 
   const cur = ins.data?.currency || "AED";
@@ -67,8 +55,15 @@ export default function Start() {
   const promos: any[] = mem.data?.promos ?? [];
   const reviewItems: any[] = review.data ?? [];
   const allLinks: any[] = links.data ?? [];
-  const repos = allLinks.filter((l) => l.kind === "github" || (typeof l.url==="string" && /^https?:\/\/(www\.)?github\.com\//i.test(l.url)));
-  const upcoming = (rems.data ?? []).filter((r: any) => !r.completed).slice(0, 4);
+  const archivedIds = new Set((history.data ?? []).map((s: any) => String(s.id)));
+  const upcoming = (rems.data ?? [])
+    .filter((r: any) => !r.completed && !archivedIds.has(String(r.ref_id ?? "")))
+    .sort((a: any, b: any) => String(a.due_date ?? "").localeCompare(String(b.due_date ?? "")))
+    .slice(0, 4);
+  const activeCount = (currentPlans.data ?? []).filter((s: any) =>
+    ["Active", "Trial"].includes(String(s.status ?? ""))).length;
+  const historyCount = history.data?.length ?? 0;
+  const renewalsCount = ins.data?.renewals_30d?.length ?? 0;
   const accounts: any[] = mem.data?.accounts_by_email ?? [];
   const missing: any[] = mem.data?.missing_info ?? [];
   const urgent = mem.data?.urgent_count ?? 0;
@@ -94,81 +89,68 @@ export default function Start() {
         </View>
 
         <View style={[styles.grid, { paddingHorizontal: pad, gap }]}>
-          {/* Prioritise the exact Lumia layout selected by the user: two rows of
-              2-up memory/link tiles, wide reminder, then the shortcut grid.
-              Live values and animations are retained. */}
+          {/* Lumia live tiles remain square and animated; detail screens and
+              infrequently used tools stay one tap away instead of being repeated. */}
           <View style={[styles.row, { gap }]}>
-            <Tile
-              title="my memory" icon="head-snowflake-outline" color={colors.accentPurple} onPress={go("/memory")} testID="tile-memory" delay={900}
+            <Tile title="my memory" icon="head-snowflake-outline" color={colors.accentPurple}
+              onPress={go("/memory")} testID="tile-memory" delay={900}
               faces={[
-                <View key="a"><TileBig>{accounts.filter((a) => a.email !== "unknown").length}</TileBig><TileLine>mail ids with subscriptions</TileLine></View>,
-                <View key="m"><TileBig>{missing.length}</TileBig><TileLine>{missing.length === 1 ? "subscription is" : "subscriptions are"} missing a detail</TileLine></View>,
-              ]}
-            />
-            <Tile
-              title="saved links" icon="bookmark-multiple" color={colors.accentGreen} onPress={go("/link-vault")} testID="tile-links" delay={1500}
+                <View key="missing"><TileBig>{missing.length}</TileBig><TileLine>{missing.length === 1 ? "record needs" : "records need"} a detail</TileLine></View>,
+                <View key="urgent"><TileBig>{urgent}</TileBig><TileLine>urgent cancellation deadlines</TileLine></View>,
+              ]} />
+            <Tile title="saved links" icon="bookmark-multiple" color={colors.accentGreen}
+              onPress={go("/link-vault")} testID="tile-links" delay={1500}
               faces={[
-                <View key="n"><TileBig>{allLinks.length}</TileBig><TileLine>links you will not forget</TileLine></View>,
-                ...allLinks.slice(0, 2).map((l) => <View key={l.id}><TileLine strong>{l.title}</TileLine><TileLine>{l.collection || l.source}</TileLine></View>),
-              ]}
-            />
+                <View key="total"><TileBig>{allLinks.length}</TileBig><TileLine>saved references</TileLine></View>,
+                ...allLinks.slice(0, 2).map((l: any) =>
+                  <View key={l.id}><TileLine strong>{l.title || "Saved link"}</TileLine><TileLine>{l.collection || l.source || "Library"}</TileLine></View>),
+              ]} />
           </View>
 
-          <View style={[styles.row, { gap }]}>
-            <Tile
-              title="github" icon="github" color={colors.accentYellow} onPress={go("/link-vault?kind=github")} testID="tile-github" delay={700}
-              faces={[
-                <View key="n"><TileBig>{repos.length}</TileBig><TileLine>repos saved</TileLine></View>,
-                ...repos.slice(0, 2).map((l) => <View key={l.id}><TileLine strong>{l.title}</TileLine><TileLine>{(l.use_cases || [])[0] || l.summary}</TileLine></View>),
-              ]}
-            />
-            <Tile
-              title="promo codes" icon="ticket-percent-outline" color={colors.accentBlue} onPress={go("/memory?tab=promos")} testID="tile-promos" delay={1800}
-              faces={promos.length
-                ? [
-                  <View key="n"><TileBig>{promos.length}</TileBig><TileLine>codes to use</TileLine></View>,
-                  ...promos.slice(0, 2).map((p) => <View key={p.code}><TileLine strong>{p.provider}</TileLine><TileLine>{p.code}{p.days_left !== null ? ` · ${p.days_left}d left` : ""}</TileLine></View>),
-                ]
-                : [<View key="e"><TileBig>0</TileBig><TileLine>no active promo codes</TileLine></View>]}
-            />
-          </View>
-
-          <Tile
-            wide title="reminders" icon="bell-ring-outline" color={colors.accentOrange} onPress={go("/reminders")} testID="tile-reminders" delay={400} height={square * 0.62}
-            faces={upcoming.length
-              ? upcoming.map((r: any) => <View key={r.id}><TileLine strong>{formatDate(r.due_date)}</TileLine><TileLine>{r.title}</TileLine></View>)
-              : [<View key="e"><TileLine strong>no reminders</TileLine><TileLine>tap to add one</TileLine></View>]}
-          />
-
-          {/* Additional functional tiles; the original Lumia grid stays intact. */}
           <View style={[styles.row, { gap }]}>
             <Tile title="subscriptions" icon="wallet-outline" color={colors.accentBlue}
               onPress={go("/(tabs)/subscriptions")} testID="tile-subscriptions" delay={550}
-              faces={[<View key="n"><TileBig>{currentPlans.data?.length ?? 0}</TileBig><TileLine>current plans</TileLine></View>]} />
+              faces={[
+                <View key="active"><TileBig>{activeCount}</TileBig><TileLine>active and trial plans</TileLine></View>,
+                <View key="monthly"><TileLine strong>{money(ins.data?.monthly_spend, cur)}</TileLine><TileLine>monthly spending in {cur}</TileLine></View>,
+                <View key="renew"><TileBig>{renewalsCount}</TileBig><TileLine>renewals within 30 days</TileLine></View>,
+              ]} />
             <Tile title="accounts" icon="account-multiple-outline" color={colors.accentGreen}
               onPress={go("/accounts")} testID="tile-accounts" delay={950}
-              faces={[<View key="n"><TileBig>{serviceAccounts.data?.length ?? 0}</TileBig><TileLine>registered services</TileLine></View>]} />
+              faces={[
+                <View key="services"><TileBig>{serviceAccounts.data?.length ?? 0}</TileBig><TileLine>registered accounts</TileLine></View>,
+                <View key="history"><TileBig>{historyCount}</TileBig><TileLine>cancelled or expired plans in history</TileLine></View>,
+              ]} />
           </View>
+
+          <Tile wide title="reminders" icon="bell-ring-outline" color={colors.accentOrange}
+            onPress={go("/reminders")} testID="tile-reminders" delay={400} height={square * 0.62}
+            faces={upcoming.length
+              ? upcoming.map((r: any) => <View key={r.id}><TileLine strong>{formatDate(r.due_date)}</TileLine><TileLine>{r.title}</TileLine></View>)
+              : [<View key="clear"><TileLine strong>nothing due</TileLine><TileLine>tap to set a reminder</TileLine></View>]} />
+
           <View style={[styles.row, { gap }]}>
-            <Tile title="ask ai" icon="robot-happy-outline" color={colors.accentPink}
-              onPress={go("/(tabs)/ai")} testID="tile-ai" delay={450}
-              faces={[<View key="n"><TileLine strong>your personal AI</TileLine><TileLine>ask about plans, links and tools</TileLine></View>]} />
-            <Tile title="gmail sync" icon="gmail" color={colors.accentPurple}
-              onPress={go("/gmail-sync")} testID="tile-gmail" delay={1200}
-              faces={[<View key="n"><TileBig>{reviewItems.length}</TileBig><TileLine>messages to review</TileLine></View>]} />
+            <Tile title="offers" icon="ticket-percent-outline" color={colors.accentYellow}
+              onPress={go("/promo-vault")} testID="tile-offers" delay={700}
+              faces={promos.length ? [
+                <View key="count"><TileBig>{promos.length}</TileBig><TileLine>saved promo codes</TileLine></View>,
+                ...promos.slice(0, 2).map((p: any) =>
+                  <View key={p.id || p.code}><TileLine strong>{p.provider || "Offer"}</TileLine><TileLine>{p.days_left == null ? "Open offers for details" : p.days_left + " days left"}</TileLine></View>),
+              ] : [<View key="empty"><TileBig>0</TileBig><TileLine>saved promotional offers</TileLine></View>]} />
+            <Tile title="inbox" icon="inbox-arrow-down-outline" color={colors.accentPink}
+              onPress={go("/(tabs)/inbox")} testID="tile-inbox" delay={1200}
+              badge={reviewItems.length > 0 ? reviewItems.length : null}
+              faces={[
+                <View key="count"><TileBig>{reviewItems.length}</TileBig><TileLine>items to review</TileLine></View>,
+                ...reviewItems.slice(0, 2).map((item: any) =>
+                  <View key={item.id}><TileLine strong>{item.extraction?.provider || item.extraction?.product || "New finding"}</TileLine><TileLine>review before adding</TileLine></View>),
+              ]} />
           </View>
-          <View style={[styles.row, { gap }]}>
-            <Tile title="brain map" icon="graph-outline" color={colors.accentYellow}
-              onPress={go("/tool-brain")} testID="tile-brain-tools" delay={1150}
-              faces={[<View key="n"><TileLine strong>your connected tools</TileLine><TileLine>find tools for your goal</TileLine></View>]} />
-            <Tile title="more tools" icon="apps" color={colors.accentOrange}
-              onPress={go("/restored-tools")} testID="tile-more" delay={1500}
-              faces={[<View key="n"><TileLine strong>prompts, promos and backups</TileLine><TileLine>all SubMind functions</TileLine></View>]} />
-          </View>
-          {/* Quarter-size shortcuts */}
+
           <View style={[styles.smallWrap, { gap }]}>
             {SMALL_TILES.map((t) => (
-              <Tile key={t.label} small title={t.label} icon={t.icon} color={(colors as any)[t.key]} onPress={go(t.href)} testID={`small-${t.label}`} />
+              <Tile key={t.label} small title={t.label} icon={t.icon} color={(colors as any)[t.key]}
+                onPress={go(t.href)} testID={`small-${t.label}`} />
             ))}
           </View>
         </View>
