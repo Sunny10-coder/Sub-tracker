@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, useInbox, useInvalidateAll } from "@/src/lib/api";
@@ -22,7 +22,8 @@ const STATUS_LABEL: Record<string, string> = {
   duplicate: "Duplicate", added: "Added", ignored: "Ignored", merged: "Merged", saved: "Saved",
 };
 
-const PROCESSED = ["added", "ignored", "merged", "saved", "auto_added"];
+const ACTIONABLE = ["needs_review", "pending", "needs_confirmation", "duplicate"];
+const PROCESSED = ["added", "ignored", "merged", "saved", "auto_added", "approved"];
 
 export default function Inbox() {
   const styles = useStyles();
@@ -42,7 +43,20 @@ export default function Inbox() {
     onSuccess: () => { refetch(); invalidate(); },
   });
 
-  const send = (id: string, action: string, extra: Record<string, unknown> = {}) => act.mutate({ id, body: { action, ...extra } });
+  const remove = useMutation({
+    mutationFn: (id:string) => api.removeInbox(id),
+    onSuccess: () => {refetch();invalidate();},
+  });
+  const confirmRemove = (id:string) => Alert.alert(
+    "Remove inbox finding?",
+    "The finding will disappear from Inbox. Saved subscriptions, accounts, plans and links will NOT be deleted.",
+    [{text:"Keep",style:"cancel"},
+     {text:"Remove",style:"destructive",onPress:()=>remove.mutate(id)}]
+  );
+  const send = (id: string, action: string, extra: Record<string, unknown> = {}) => {
+    if(act.isPending)return;
+    act.mutate({ id, body: { action, ...extra } });
+  };
 
   return (
     <View style={styles.container}>
@@ -65,7 +79,8 @@ export default function Inbox() {
           renderItem={({ item }) => {
             const ex = item.extraction || {};
             const ver = ex.verified || {};
-            const processed = PROCESSED.includes(item.status);
+            const processed = PROCESSED.includes(String(item.status||"")) ||
+              !ACTIONABLE.includes(String(item.status||""));
             const suggested: string = item.suggested_destination || ex.suggested_destination || "";
             const doubts: string[] = item.doubts || ex.doubts || [];
             const isDup = item.status === "duplicate" && item.duplicate_of;
@@ -113,24 +128,38 @@ export default function Inbox() {
                 {processed ? (
                   <View style={styles.statusPill}>
                     <Icon name="check-circle" size={16} color={colors.success} />
-                    <Text style={styles.statusText}>{STATUS_LABEL[item.status] || item.status}</Text>
+                    <Text style={styles.statusText}>{STATUS_LABEL[item.status] || "Previously handled"}</Text>
                   </View>
                 ) : (
                   <>
                     <Text style={styles.chooseLabel}>{doubts.length || item.confidence < 0.95 ? "Not sure? Choose where it goes:" : "Add it:"}</Text>
                     <View style={styles.actions}>
-                      <ActionBtn icon="account-check" label="Add as account" filled={suggested === "account"} tone="brand" onPress={() => send(item.id, "account")} />
-                      <ActionBtn icon="tag-outline" label="Add as plan" filled={suggested === "plan"} tone="mint" onPress={() => send(item.id, "plan")} />
+                      <ActionBtn icon="account-check" label="Add as account" filled={suggested === "account"} tone="brand" disabled={act.isPending} onPress={() => send(item.id, "account")} />
+                      <ActionBtn icon="tag-outline" label="Add as plan" filled={suggested === "plan"} tone="mint" disabled={act.isPending} onPress={() => send(item.id, "plan")} />
                     </View>
                     <View style={styles.actions}>
-                      {isDup ? <ActionBtn icon="merge" label="Merge" tone="warning" onPress={() => send(item.id, "merge", { merge_into: item.duplicate_of })} /> : null}
+                      {isDup ? <ActionBtn icon="merge" label="Merge" tone="warning" disabled={act.isPending} onPress={() => send(item.id, "merge", { merge_into: item.duplicate_of })} /> : null}
                       <ActionBtn icon="pencil-outline" label="Edit" tone="muted" onPress={() => router.push(`/review/${item.id}`)} />
-                      <ActionBtn icon="link-variant" label="Link" tone="muted" onPress={() => send(item.id, "link")} />
+                      <ActionBtn icon="link-variant" label="Link" tone="muted" disabled={act.isPending} onPress={() => send(item.id, "link")} />
                       {item.raw_text ? <ActionBtn icon="refresh" label="Re-scan" tone="muted" onPress={() => reanalyze.mutate(item.id)} /> : null}
-                      <ActionBtn icon="close" label="Ignore" tone="muted" onPress={() => send(item.id, "ignore")} />
+                      <ActionBtn icon="close" label="Ignore" tone="muted" disabled={act.isPending} onPress={() => send(item.id, "ignore")} />
                     </View>
                   </>
                 )}
+                <View style={styles.footer}>
+                  {act.isError ? <Text style={styles.errorText} testID={`inbox-action-error-${item.id}`}>
+                    {String((act.error as Error)?.message||"Action failed")}
+                  </Text> : null}
+                  {remove.isError ? <Text style={styles.errorText}>
+                    {String((remove.error as Error)?.message||"Could not remove finding")}
+                  </Text> : null}
+                  <Pressable accessibilityRole="button" accessibilityLabel="Remove this Inbox item"
+                    disabled={remove.isPending} onPress={()=>confirmRemove(item.id)}
+                    testID={`inbox-remove-${item.id}`} style={styles.removeBtn}>
+                    <Icon name="trash-can-outline" size={17} color={colors.error}/>
+                    <Text style={styles.removeLabel}>Remove from inbox</Text>
+                  </Pressable>
+                </View>
               </Card>
             );
           }}
@@ -160,7 +189,7 @@ function Field({ label, value, ok, accent }: { label: string; value: string; ok?
   );
 }
 
-function ActionBtn({ icon, label, tone, filled, onPress }: { icon: string; label: string; tone: string; filled?: boolean; onPress: () => void }) {
+function ActionBtn({ icon, label, tone, filled, disabled, onPress }: { icon: string; label: string; tone: string; filled?: boolean; disabled?:boolean; onPress: () => void }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const base: Record<string, string> = { mint: colors.brandSecondary, warning: colors.warning, muted: colors.onSurfaceTertiary, brand: colors.brandPrimary };
@@ -169,6 +198,7 @@ function ActionBtn({ icon, label, tone, filled, onPress }: { icon: string; label
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       testID={`inbox-action-${label}`}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -202,4 +232,8 @@ const useStyles = makeStyles((colors) => ({
   actionLabel: { fontSize: 13, fontWeight: "600" },
   statusPill: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 },
   statusText: { color: colors.success, fontSize: 13, fontWeight: "700" },
+  footer:{gap:6,marginTop:12,borderTopWidth:1,borderTopColor:colors.border,paddingTop:9},
+  removeBtn:{flexDirection:"row",alignItems:"center",gap:8,paddingVertical:8,alignSelf:"flex-start"},
+  removeLabel:{color:colors.error,fontSize:13,fontWeight:"700"},
+  errorText:{color:colors.error,fontSize:12,lineHeight:17},
 }));
