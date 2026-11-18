@@ -823,6 +823,8 @@ async def inbox_action(item_id: str, body: InboxAction):
     item = await db.smart_inbox.find_one({"id": item_id, "user_id": USER_ID, "deleted_at": None})
     if not item:
         raise HTTPException(404, "Inbox item not found")
+    if str(item.get("status") or "") == "ignored" and body.action in ("ignore", "dismiss"):
+        return {"ok": True, "status": "ignored", "already_handled": True}
     if str(item.get("status") or "") in ("ignored", "merged", "added", "saved", "auto_added", "approved"):
         raise HTTPException(409, "Already processed. Remove this inbox finding instead.")
     ex = dict(item.get("extraction", {}))
