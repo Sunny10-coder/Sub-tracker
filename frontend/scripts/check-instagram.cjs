@@ -21,6 +21,10 @@ function load(file,requireMock){
   return module.exports;
 }
 const intel=load("src/lib/vault-intelligence.ts");
+const fmt=load("src/lib/format.ts");
+assert.equal(fmt.extractSharedUrl("Check this reel https://www.instagram.com/reel/ABC123/?igsh=x awesome!"),
+  "https://www.instagram.com/reel/ABC123/?igsh=x");
+assert.equal(fmt.extractSharedUrl("No link in this text"),"");
 assert.equal(intel.canonicalUrl("https://www.instagram.com/reel/ABC123/?igsh=abc&utm_source=share"),
   "https://www.instagram.com/reel/ABC123");
 assert.equal(intel.instagramPostInfo("https://www.instagram.com/reel/ABC123").type,"reel");
