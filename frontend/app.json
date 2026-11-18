@@ -28,7 +28,7 @@
         "READ_MEDIA_IMAGES",
         "POST_NOTIFICATIONS"
       ],
-      "versionCode": 10
+      "versionCode": 11
     },
     "web": {
       "bundler": "metro",

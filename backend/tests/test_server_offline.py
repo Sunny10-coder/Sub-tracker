@@ -336,3 +336,54 @@ def test_spending_totals_do_not_mix_currencies_or_unverified_trials(client):
     assert result["monthly_by_currency"] == {"AED": 50.0, "USD": 20.0}
     assert result["monthly_spend"] == 50.0 and result["currency"] == "AED"
     assert result["spend_is_partial"] is True
+
+
+def test_inbox_remove_processed_finding_keeps_saved_subscription(client):
+    item = client.post("/api/ingest/text", json={
+        "text": NETFLIX.format(renew=_iso(8)), "source": "manual"
+    }).json()
+    iid = item["id"]
+    action = client.post(f"/api/inbox/{iid}/action", json={"action": "account"})
+    assert action.status_code == 200, action.text
+    sid = action.json()["ref"]
+    assert client.get(f"/api/subscriptions/{sid}").status_code == 200
+    assert any(x["id"] == iid for x in client.get("/api/inbox?tab=all").json())
+    assert client.post(f"/api/inbox/{iid}/action", json={"action": "plan"}).status_code == 409
+    removal = client.delete(f"/api/inbox/{iid}")
+    assert removal.status_code == 200, removal.text
+    assert removal.json()["removed"] is True
+    assert not any(x["id"] == iid for x in client.get("/api/inbox?tab=all").json())
+    assert client.get(f"/api/subscriptions/{sid}").status_code == 200
+    assert client.delete(f"/api/inbox/{iid}").status_code == 404
+
+
+def test_inbox_ignore_is_idempotent_then_removable(client):
+    item = client.post("/api/ingest/text", json={
+        "text": NETFLIX.format(renew=_iso(11)), "source": "manual"
+    }).json()
+    iid = item["id"]
+    first = client.post(f"/api/inbox/{iid}/action", json={"action": "ignore"})
+    second = client.post(f"/api/inbox/{iid}/action", json={"action": "ignore"})
+    assert first.status_code == 200 and first.json()["status"] == "ignored"
+    assert second.status_code == 200 and second.json().get("already_handled") is True
+    assert client.delete(f"/api/inbox/{iid}").status_code == 200
+    assert client.get(f"/api/inbox/{iid}").status_code == 404
+
+
+def test_inbox_finding_can_be_removed_after_action_without_deleting_destination(client):
+    text = "From: Netflix <billing@netflix.com>\nTo: test@example.com\nSubject: Plan notice\nYour Netflix plan is available for USD 15 monthly."
+    created = client.post("/api/ingest/text", json={"text": text, "source": "manual"})
+    assert created.status_code == 200, created.text
+    entry = created.json()
+    item_id = entry["id"]
+    acted = client.post(f"/api/inbox/{item_id}/action", json={"action": "plan"})
+    assert acted.status_code == 200, acted.text
+    saved_id = acted.json().get("plan_id") or acted.json().get("ref")
+    assert saved_id
+    duplicate_action = client.post(f"/api/inbox/{item_id}/action", json={"action": "plan"})
+    assert duplicate_action.status_code == 409
+    removed = client.delete(f"/api/inbox/{item_id}")
+    assert removed.status_code == 200 and removed.json()["removed"] is True
+    assert client.get(f"/api/inbox/{item_id}").status_code == 404
+    assert item_id not in [i["id"] for i in client.get("/api/inbox?tab=all").json()]
+    assert saved_id in [p["id"] for p in client.get("/api/watchlist").json()]

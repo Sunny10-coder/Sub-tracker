@@ -554,7 +554,7 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
         ||(Number(x.classifier_version)===CLASSIFIER_VERSION&&Number(x.confidence)>=MIN_CONFIDENCE));
       result={removed:before-v.review_queue.length,preserved: v.review_queue.length};
    }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/reanalyze")){
-      const id=route.split("/")[2],entry=v.review_queue.find(x=>x.id===id);
+      const id=route.split("/")[2],entry=v.review_queue.find(x=>x.id===id&&!x.deleted_at);
       if(!entry)notFound();
       if(!string(entry.raw_text))throw Error("The original text is unavailable for reanalysis.");
       const candidate=classifyMail({id:"manual-recheck",subject:string(entry.source_subject||""),
@@ -566,11 +566,28 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       entry.confidence=candidate.confidence;
       entry.doubts=["Rechecked against the saved text; review before adding."];
       result=entry;
-   }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
-      const id=route.split("/")[2],entry=v.review_queue.find(x=>x.id===id);
+   }else if(route.startsWith("/inbox/")&&method==="DELETE"){
+      const id=route.split("/")[2];
+      const entry=v.review_queue.find(x=>String(x.id)===id);
       if(!entry)notFound();
+      // Clearing an inbox item never deletes a linked subscription/account/
+      // watchlist plan or saved link. Keep mail ingestion source keys to prevent
+      // a previously dismissed Gmail event being immediately re-imported.
+      entry.deleted_at=nowIso();
+      entry.reviewed_at=entry.reviewed_at||nowIso();
+      v.mail_activity.unshift({id:"activity-"+uid(),
+        source_key:string(entry.source_key||id),action:"removed_from_inbox",
+        record_id:null,recorded_at:nowIso()});
+      result={ok:true,removed:true};
+   }else if(route.startsWith("/inbox/")&&method==="POST"&&route.endsWith("/action")){
+      const id=route.split("/")[2],entry=v.review_queue.find(x=>x.id===id&&!x.deleted_at);
+      if(!entry)notFound();
+      if(string(entry.status)==="ignored"&&["ignore","dismiss"].includes(string(data.action))){
+        result={ok:true,status:"ignored",already_handled:true};
+        await save(v);return result as T;
+      }
       if(!["needs_review","pending","needs_confirmation","duplicate"].includes(string(entry.status)))
-         throw Error("This finding has already been handled.");
+         throw Error("This finding was already processed. Use Remove to clear it from Inbox; saved records are kept.");
       const action=string(data.action),ex={...(entry.extraction||{}),...(data.edits||{})};
       const provider=string(ex.provider),email=string(ex.account_email||entry.mailbox_email||entry.source_to).toLowerCase();
       let recordId:string|undefined;
@@ -797,12 +814,12 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
  else if(route==="/settings")result=v.settings;
  else if(route==="/inbox"){
     const tab=lower(params.get("tab")||"needs_review");
-    result=v.review_queue.filter(x=>
+    result=v.review_queue.filter(x=>!x.deleted_at).filter(x=>
       tab==="all"||(tab==="needs_review"?["needs_review","pending","needs_confirmation","duplicate"].includes(string(x.status)):
       tab==="auto_added"?["auto_added","added","approved"].includes(string(x.status)):
       tab==="duplicates"?["duplicate","merged"].includes(string(x.status)):lower(x.status)===tab));
  }else if(route.startsWith("/inbox/")){
-    result=v.review_queue.find(x=>x.id===route.split("/")[2])||notFound();
+    result=v.review_queue.find(x=>x.id===route.split("/")[2]&&!x.deleted_at)||notFound();
  }else if(route==="/memory/dashboard"){
     const currency=string(v.settings.currency)||"AED";
     const radar=v.subscriptions.filter(x=>["Active","Trial"].includes(x.status)).map(x=>{

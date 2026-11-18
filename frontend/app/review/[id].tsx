@@ -2,7 +2,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, useInboxItem, useInvalidateAll } from "@/src/lib/api";
@@ -42,6 +42,14 @@ export default function Review() {
     onSuccess: done,
   });
   const rescan = useMutation({ mutationFn: () => api.inboxReanalyze(id!), onSuccess: () => { refetch(); invalidate(); } });
+  const remove = useMutation({
+    mutationFn: () => api.removeInbox(id!),
+    onSuccess: done
+  });
+  const confirmRemove = () => Alert.alert("Remove Inbox finding?",
+    "Remove this finding from Inbox without deleting any saved plan, subscription, account or link.",
+    [{text:"Keep",style:"cancel"},
+     {text:"Remove",style:"destructive",onPress:()=>remove.mutate()}]);
 
   if (isLoading || !data) return <View style={styles.container}><AppHeader title="Review" back /><Loading /></View>;
 
@@ -50,7 +58,7 @@ export default function Review() {
   const doubts: string[] = data.doubts || ex.doubts || [];
   const suggested: string = data.suggested_destination || ex.suggested_destination || "";
   const busy = act.isPending;
-  const processed = ["added", "ignored", "merged", "saved", "auto_added"].includes(data.status);
+  const processed = !["needs_review", "needs_confirmation", "duplicate", "pending"].includes(String(data.status||""));
   const verifiedKeys = Object.keys(ver).filter((k) => ver[k]);
 
   return (
@@ -92,14 +100,20 @@ export default function Review() {
               <Text style={styles.toggleText}>{showText ? "Hide" : "Show"} the original text</Text>
             </Pressable>
             {showText ? <Card><Text style={styles.raw} selectable>{data.raw_text}</Text></Card> : null}
-            <PrimaryButton title="Re-scan the text" icon="refresh" variant="secondary" onPress={() => rescan.mutate()} loading={rescan.isPending} testID="rv-rescan" />
+            {!processed ? <PrimaryButton title="Re-scan the text" icon="refresh" variant="secondary"
+              onPress={() => rescan.mutate()} loading={rescan.isPending} testID="rv-rescan" /> : null}
           </View>
         ) : null}
       </FormScroll>
 
       {processed ? (
         <View style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
-          <Text style={styles.fine}>Already handled ({data.status}).</Text>
+          <Text style={styles.fine}>This finding has already been handled ({data.status}).
+            Removing it clears the Inbox entry but keeps your saved record.</Text>
+          <PrimaryButton title="Remove from inbox" icon="trash-can-outline" variant="secondary"
+            onPress={confirmRemove} loading={remove.isPending} testID="rv-remove-processed" />
+          {remove.isError?<Text style={[styles.fine,{color:colors.error}]}>
+            {String((remove.error as Error)?.message||"Could not remove item.")}</Text>:null}
         </View>
       ) : (
         <View style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
@@ -111,6 +125,11 @@ export default function Review() {
             <PrimaryButton title="Save as link" icon="link-variant" variant="secondary" onPress={() => act.mutate("link")} disabled={busy} style={{ flex: 1 }} testID="rv-link" />
             <PrimaryButton title="Ignore" icon="close" variant="secondary" onPress={() => act.mutate("ignore")} disabled={busy} style={{ flex: 1 }} testID="rv-ignore" />
           </View>
+          <PrimaryButton title="Remove from inbox" icon="trash-can-outline" variant="secondary"
+            onPress={confirmRemove} loading={remove.isPending} disabled={busy}
+            testID="rv-remove" />
+          {remove.isError?<Text style={[styles.fine,{color:colors.error}]}>
+            {String((remove.error as Error)?.message||"Could not remove item.")}</Text>:null}
           {!f.provider ? <Text style={styles.fine}>Enter the provider above to add it as an account or plan.</Text> : null}
           {act.isError ? <Text style={[styles.fine, { color: colors.error }]} testID="review-save-error">
             {String((act.error as Error)?.message||"Could not save. The record remains in Review.")}

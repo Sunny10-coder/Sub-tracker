@@ -772,23 +772,38 @@ async def list_inbox(tab: str = "all"):
     elif tab == "auto_added":
         q["status"] = "auto_added"
     elif tab == "duplicates":
-        q["status"] = "duplicate"
+        q["status"] = {"$in": ["duplicate", "merged"]}
     items = await db.smart_inbox.find(q).sort("created_at", -1).to_list(200)
     return [clean(i) for i in items]
 
 
 @api.get("/inbox/{item_id}")
 async def get_inbox_item(item_id: str):
-    item = await db.smart_inbox.find_one({"id": item_id, "user_id": USER_ID})
+    item = await db.smart_inbox.find_one({"id": item_id, "user_id": USER_ID, "deleted_at": None})
     if not item:
         raise HTTPException(404, "Inbox item not found")
     return clean(item)
 
 
+@api.delete("/inbox/{item_id}")
+async def remove_inbox_item(item_id: str):
+    """Remove the inbox finding, not the saved account, subscription or link."""
+    item = await db.smart_inbox.find_one({
+        "id": item_id, "user_id": USER_ID, "deleted_at": None
+    })
+    if not item:
+        raise HTTPException(404, "Inbox item not found")
+    await db.smart_inbox.update_one(
+        {"id": item_id, "user_id": USER_ID, "deleted_at": None},
+        {"$set": {"deleted_at": now_iso(), "reviewed_at": now_iso()}}
+    )
+    return {"ok": True, "removed": True}
+
+
 @api.post("/inbox/{item_id}/reanalyze")
 async def inbox_reanalyze(item_id: str):
     """Run the (improved) extraction again on the stored text of an item."""
-    item = await db.smart_inbox.find_one({"id": item_id, "user_id": USER_ID})
+    item = await db.smart_inbox.find_one({"id": item_id, "user_id": USER_ID, "deleted_at": None})
     if not item:
         raise HTTPException(404, "Inbox item not found")
     text = item.get("raw_text") or ""
@@ -805,9 +820,13 @@ async def inbox_reanalyze(item_id: str):
 
 @api.post("/inbox/{item_id}/action")
 async def inbox_action(item_id: str, body: InboxAction):
-    item = await db.smart_inbox.find_one({"id": item_id, "user_id": USER_ID})
+    item = await db.smart_inbox.find_one({"id": item_id, "user_id": USER_ID, "deleted_at": None})
     if not item:
         raise HTTPException(404, "Inbox item not found")
+    if str(item.get("status") or "") == "ignored" and body.action in ("ignore", "dismiss"):
+        return {"ok": True, "status": "ignored", "already_handled": True}
+    if str(item.get("status") or "") in ("ignored", "merged", "added", "saved", "auto_added", "approved"):
+        raise HTTPException(409, "Already processed. Remove this inbox finding instead.")
     ex = dict(item.get("extraction", {}))
     if body.edits:
         ex.update({k: v for k, v in body.edits.items() if v is not None})
@@ -821,8 +840,13 @@ async def inbox_action(item_id: str, body: InboxAction):
             if isinstance(ex.get(f), str):
                 ex[f] = ex[f].strip().upper() if f == "promo_code" else ex[f].strip().lower()
 
-    if body.action == "ignore":
-        await db.smart_inbox.update_one({"id": item_id}, {"$set": {"status": "ignored", "deleted_at": now_iso()}})
+    if body.action in ("ignore", "dismiss"):
+        if str(item.get("status") or "") in ("ignored", "merged", "added", "saved", "auto_added", "approved"):
+            return {"ok": True, "status": item.get("status"), "already_handled": True}
+        await db.smart_inbox.update_one(
+            {"id": item_id, "user_id": USER_ID, "deleted_at": None},
+            {"$set": {"status": "ignored", "reviewed_at": now_iso()}}
+        )
         return {"ok": True, "status": "ignored"}
 
     if body.action == "merge" and body.merge_into:

@@ -1,11 +1,11 @@
-name: SubMind Android Widget & review regression verification
+name: SubMind Deadline and Inbox Fix Verification
 
 # Deliberately one-shot: ordinary code pushes do not trigger repeated CI jobs.
-# Verify final Instagram clipboard/share handling and caption enrichment.
+# Re-run after idempotent Ignore correction and safeguard saved records.
 on:
   push:
     branches:
-      - feature/submind-android-home-widget-review-fix-20261118
+      - feature/submind-deadline-inbox-actions-20261118
     paths:
       - .github/workflows/submind-metro-verify.yml
 
