@@ -1,11 +1,11 @@
-name: SubMind Metro Android 10 home widget APK
+name: SubMind Metro Android 11 Inbox and Deadline APK
 
 # Android build 10: Metro 3-section launcher widget, notes, review save fixes.
 
 on:
   push:
     branches:
-      - feature/submind-android-home-widget-review-fix-20261118
+      - feature/submind-deadline-inbox-actions-20261118
     paths:
       - .github/workflows/submind-metro-apk.yml
   workflow_dispatch:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: submind-android-overview-widget-apk
+  group: submind-deadline-inbox-apk
   cancel-in-progress: true
 
 jobs:
@@ -79,7 +79,7 @@ jobs:
       - name: Upload SubMind Metro APK
         uses: actions/upload-artifact@v4
         with:
-          name: SubMind-Metro-Android10-Overview-Widget-APK
+          name: SubMind-Metro-Android11-Deadline-Inbox-APK
           path: |
             frontend/android/app/build/outputs/apk/release/*.apk
             frontend/apk-signature.txt
