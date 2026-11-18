@@ -268,7 +268,8 @@ export async function localRequest<T>(path:string,opts?:RequestInit):Promise<T>{
       if(!rec.provider||rec.provider==="Unknown")throw Error("Account provider is required");
       if(v.accounts.some(a=>normalized(a.provider)===normalized(rec.provider)&&
         string(a.email).toLowerCase()===string(rec.email).toLowerCase()&&
-        (!!rec.email||String(a.source_subscription_id||"")===String(rec.source_subscription_id||""))))
+        (!!rec.email||(Boolean(rec.source_subscription_id)&&
+          String(a.source_subscription_id||"")===String(rec.source_subscription_id)))))
         throw Error("409: This provider account is already saved");
       v.accounts.unshift(rec);
       if(rec.email)for(const sub of v.subscriptions)

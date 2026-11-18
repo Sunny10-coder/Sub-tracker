@@ -1105,7 +1105,7 @@ async def delete_link(lid: str):
 @api.get("/watchlist")
 async def list_watchlist():
     plans = await db.plan_watchlist.find(await base_query()).sort("created_at", -1).to_list(500)
-    return [clean(p) for p in plans]
+    return [clean(p) for p in plans if p.get("status") not in ("Subscribed", "Moved to plans")]
 
 
 @api.get("/watchlist/{wid}")
@@ -1150,15 +1150,39 @@ async def delete_plan(wid: str):
 
 @api.post("/watchlist/{wid}/convert")
 async def convert_plan(wid: str):
-    doc = await db.plan_watchlist.find_one({"id": wid, "user_id": USER_ID})
+    """Keep the watchlist item as history, but expose the subscription only once."""
+    doc = await db.plan_watchlist.find_one({"id": wid, "user_id": USER_ID, "deleted_at": None})
     if not doc:
-        raise HTTPException(404, "Not found")
+        raise HTTPException(404, "Watchlist item not found")
+    linked_id = doc.get("subscription_id")
+    prior = None
+    if linked_id:
+        prior = await db.subscriptions.find_one({"id": linked_id, "user_id": USER_ID, "deleted_at": None})
+    if not prior:
+        prior = await db.subscriptions.find_one({"source_watchlist_id": wid, "user_id": USER_ID, "deleted_at": None})
+    email = str(doc.get("account_email") or "").strip().lower()
+    if not prior and email:
+        prior = await db.subscriptions.find_one({
+            "provider": doc["provider"], "plan": doc.get("plan", ""),
+            "account_email": email, "user_id": USER_ID, "deleted_at": None
+        })
+    if prior:
+        sid = prior["id"]
+        await db.plan_watchlist.update_one({"id": wid, "user_id": USER_ID},
+            {"$set": {"status": "Subscribed", "subscription_id": sid, "updated_at": now_iso()}})
+        return {"ok": True, "duplicate": True, "subscription_id": sid}
     ex = {"content_type": "subscription", "provider": doc["provider"], "product": doc["provider"],
           "plan": doc.get("plan", ""), "price": doc.get("price"), "currency": doc.get("currency", "AED"),
-          "billing_cycle": doc.get("billing_cycle", "monthly"), "category": "Other", "tags": doc.get("tags", [])}
+          "billing_cycle": doc.get("billing_cycle", "monthly"), "account_email": email,
+          "promo_code": doc.get("promo_code", ""), "category": "Other", "tags": doc.get("tags", [])}
     sid = await _create_subscription_from(ex, "watchlist", doc.get("url", ""), None)
-    await db.plan_watchlist.update_one({"id": wid}, {"$set": {"status": "Subscribed", "updated_at": now_iso()}})
-    return {"ok": True, "subscription_id": sid}
+    # Moving a watchlist idea does not prove there is a paid, active subscription.
+    await db.subscriptions.update_one({"id": sid, "user_id": USER_ID},
+        {"$set": {"status": "Unknown", "auto_renew": False, "review_required": True,
+                  "source_watchlist_id": wid, "updated_at": now_iso()}})
+    await db.plan_watchlist.update_one({"id": wid, "user_id": USER_ID},
+        {"$set": {"status": "Subscribed", "subscription_id": sid, "updated_at": now_iso()}})
+    return {"ok": True, "duplicate": False, "subscription_id": sid}
 
 
 # ---------------------------------------------------------------------------

@@ -266,3 +266,57 @@ def test_chat_context_carries_memory(client):
 def server_ctx():
     import asyncio
     return asyncio.new_event_loop().run_until_complete(server._build_context())
+
+
+def test_cancellation_preserves_subscription_history_and_stops_billing_alerts(client):
+    sid = client.post("/api/subscriptions", json={
+        "provider": "TestLumia", "plan": "Plus", "price": 45.0,
+        "currency": "AED", "renewal_date": _iso(14), "billing_cycle": "monthly",
+        "account_email": "one@example.com", "create_reminder": True
+    }).json()["id"]
+    before = client.get("/api/reminders").json()
+    assert any(r["ref_id"] == sid and not r["completed"] for r in before)
+    result = client.patch(f"/api/subscriptions/{sid}", json={"status": "Cancelled"})
+    assert result.status_code == 200, result.text
+    saved = result.json()
+    assert saved["status"] == "Cancelled" and saved["auto_renew"] is False
+    assert saved["cancellation_date"] and saved["account_email"] == "one@example.com"
+    assert saved["status_history"][-1]["to"] == "Cancelled"
+    assert client.get(f"/api/subscriptions/{sid}").status_code == 200
+    after = client.get("/api/reminders").json()
+    assert all(r["completed"] for r in after if r["ref_id"] == sid and r["kind"] in ("renewal", "trial_ending"))
+    assert sid not in [r["id"] for r in client.get("/api/memory/dashboard").json()["cancel_radar"]]
+    assert client.get("/api/insights").json()["active_count"] == 0
+
+
+def test_conversion_from_watchlist_is_idempotent_and_keeps_account_email(client):
+    wid = client.post("/api/watchlist", json={
+        "provider": "TestMetroWatch", "plan": "Pro", "price": 9, "currency": "USD",
+        "billing_cycle": "monthly", "account_email": "plan@example.com"
+    }).json()["id"]
+    first = client.post(f"/api/watchlist/{wid}/convert")
+    second = client.post(f"/api/watchlist/{wid}/convert")
+    assert first.status_code == 200 and second.status_code == 200
+    sid = first.json()["subscription_id"]
+    assert second.json()["subscription_id"] == sid and second.json()["duplicate"] is True
+    assert wid not in [p["id"] for p in client.get("/api/watchlist").json()]
+    subs = [s for s in client.get("/api/subscriptions").json() if s.get("source_watchlist_id") == wid]
+    assert len(subs) == 1
+    assert subs[0]["account_email"] == "plan@example.com"
+    assert subs[0]["status"] == "Unknown" and subs[0]["review_required"] is True
+
+
+def test_same_provider_on_two_accounts_is_not_treated_as_one_subscription(client):
+    for email in ("one@example.com", "two@example.com"):
+        result = client.post("/api/subscriptions", json={
+            "provider": "TestSharedProvider", "plan": "Pro",
+            "account_email": email, "price": 5, "currency": "AED"
+        })
+        assert result.status_code == 200
+    # Email-specific extraction must find its own account, never another.
+    import asyncio
+    found = asyncio.run(server._find_duplicate({
+        "provider": "TestSharedProvider", "plan": "Pro",
+        "account_email": "third@example.com", "content_type": "subscription"
+    }))
+    assert found is None
