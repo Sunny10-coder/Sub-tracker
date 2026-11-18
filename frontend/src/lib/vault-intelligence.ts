@@ -97,7 +97,7 @@ export function classifyLink(url: string, note = "", source = "share"): VaultIte
   const ig=instagramPostInfo(canonical_url);
   const category = inferCategory(note || (ig.type === "other" ? context : ""));
   const kind=domain==="github.com"&&parsed.pathname.split("/").filter(Boolean).length>=2?"github":
-    domain==="instagram.com"||domain==="www.instagram.com"?"instagram":
+    domain==="instagram.com"||domain==="m.instagram.com"||domain==="instagr.am"?"instagram":
     domain==="youtube.com"||domain==="youtu.be"?"youtube":
     domain==="reddit.com"?"reddit":domain==="tiktok.com"?"tiktok":
     domain==="x.com"||domain==="twitter.com"?"twitter":"article";
