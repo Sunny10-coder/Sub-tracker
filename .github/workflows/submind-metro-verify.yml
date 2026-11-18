@@ -1,7 +1,7 @@
 name: SubMind Deadline and Inbox Fix Verification
 
 # Deliberately one-shot: ordinary code pushes do not trigger repeated CI jobs.
-# Re-run with server Inbox removal and persistence regression tests.
+# Re-run after idempotent Ignore correction and safeguard saved records.
 on:
   push:
     branches:
