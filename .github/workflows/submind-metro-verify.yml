@@ -50,3 +50,5 @@ jobs:
         run: yarn install --ignore-scripts --ignore-engines --non-interactive
       - name: Check types
         run: npx tsc --noEmit -p .
+      - name: Check Instagram link intelligence
+        run: node scripts/check-instagram.cjs
