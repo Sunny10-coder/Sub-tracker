@@ -52,10 +52,14 @@ const METHOD=(opts?:RequestInit)=>String(opts?.method||"GET").toUpperCase();
 const collectionRoutes=new Set(["/subscriptions","/links","/watchlist","/reminders","/inbox"]);
 const recordKey=(x:PrivateRecord,collection:string):string=>{
   const text=(v:any)=>String(v??"").toLowerCase().replace(/[^a-z0-9]/g,"");
-  if(collection==="/subscriptions")return [text(x.provider),text(x.plan),text(x.account_email),text(x.product)].join(":");
+  // Never silently collapse two independently created subscriptions just
+  // because their provider and plan names happen to match.
+  if(collection==="/subscriptions")return x.id?"id:"+String(x.id):
+    [text(x.provider),text(x.plan),text(x.account_email),text(x.product)].join(":");
   if(collection==="/links")return text(x.canonical_url||x.url);
   if(collection==="/inbox")return String(x.source_key||[x.mailbox_email,x.message_id,x.id].join(":"));
-  if(collection==="/watchlist")return [text(x.provider),text(x.plan),text(x.account_email)].join(":");
+  if(collection==="/watchlist")return x.id?"id:"+String(x.id):
+    [text(x.provider),text(x.plan),text(x.account_email)].join(":");
   return String(x.id||"");
 };
 const mergeRecords=(collection:string,local:PrivateRecord[],remote:PrivateRecord[])=>{

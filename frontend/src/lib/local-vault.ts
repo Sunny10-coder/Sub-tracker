@@ -214,7 +214,8 @@ export function localInsights(v:Vault):Dict{
   category_breakdown:Object.entries(cats).map(([category,amount])=>({category,amount:Math.round(amount*100)/100})).sort((a,b)=>b.amount-a.amount),
   top_category:Object.entries(cats).sort((a,b)=>b[1]-a[1])[0]?.[0]||null,
   overlaps:Object.entries(catNames).filter(([,names])=>names.length>1).map(([category,providers])=>({category,providers})),
-  price_increases:[],watchlist_count:v.watchlist.length};
+  price_increases:[],watchlist_count:v.watchlist.filter(x=>!["Subscribed","Moved to plans"].includes(String(x.status))).length,
+  spend_is_partial:Object.keys(monthly).some(k=>k!==cur)};
 }
 function jsonBody(opts?:RequestInit):Dict{try{return JSON.parse(String(opts?.body||"{}"))}catch{return {}}}
 const nowIso=()=>new Date().toISOString();

@@ -320,3 +320,19 @@ def test_same_provider_on_two_accounts_is_not_treated_as_one_subscription(client
         "account_email": "third@example.com", "content_type": "subscription"
     }))
     assert found is None
+
+
+def test_spending_totals_do_not_mix_currencies_or_unverified_trials(client):
+    client.post("/api/subscriptions", json={
+        "provider": "AEDTool", "plan": "Paid", "price": 50,
+        "currency": "AED", "billing_cycle": "monthly"})
+    client.post("/api/subscriptions", json={
+        "provider": "USDTool", "plan": "Paid", "price": 20,
+        "currency": "USD", "billing_cycle": "monthly"})
+    client.post("/api/subscriptions", json={
+        "provider": "FreeTrial", "plan": "Trial", "status": "Trial",
+        "price": 100, "currency": "AED", "billing_cycle": "monthly"})
+    result = client.get("/api/insights").json()
+    assert result["monthly_by_currency"] == {"AED": 50.0, "USD": 20.0}
+    assert result["monthly_spend"] == 50.0 and result["currency"] == "AED"
+    assert result["spend_is_partial"] is True

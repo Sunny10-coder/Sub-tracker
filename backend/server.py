@@ -1243,7 +1243,20 @@ async def insights():
     subs = await db.subscriptions.find(await base_query()).to_list(500)
     subs = [clean(s) for s in subs]
     active = [s for s in subs if s.get("status") in ("Active", "Trial")]
-    monthly = round(sum(_monthly_cost(s) for s in active), 2)
+    # Do not add USD, AED, EUR etc. as though they shared a currency.
+    # Trial plans do not count as paid charges unless explicitly confirmed.
+    monthly_by_currency: Dict[str, float] = {}
+    for sub in active:
+        if sub.get("auto_renew") is False or sub.get("review_required") is True:
+            continue
+        if sub.get("status") == "Trial" and sub.get("trial_paid") is not True:
+            continue
+        currency = str(sub.get("currency") or "").upper()
+        if currency and isinstance(sub.get("price"), (int, float)):
+            monthly_by_currency[currency] = monthly_by_currency.get(currency, 0) + _monthly_cost(sub)
+    monthly_by_currency = {key: round(value, 2) for key, value in monthly_by_currency.items()}
+    display_currency = str(settings.get("currency") or "AED").upper()
+    monthly = round(monthly_by_currency.get(display_currency, 0), 2)
     yearly = round(monthly * 12, 2)
 
     today = datetime.now(timezone.utc).date()
@@ -1272,7 +1285,8 @@ async def insights():
     cats: Dict[str, float] = {}
     cat_count: Dict[str, list] = {}
     for s in active:
-        c = s.get("category", "Other")
+        currency = str(s.get("currency") or "").upper()
+        c = f"{s.get('category', 'Other')} / {currency or 'Unknown currency'}"
         cats[c] = cats.get(c, 0) + _monthly_cost(s)
         cat_count.setdefault(c, []).append(s.get("provider"))
     top_category = max(cats, key=cats.get) if cats else None
@@ -1288,14 +1302,16 @@ async def insights():
 
     watch = await db.plan_watchlist.find(await base_query()).to_list(200)
     return {
-        "currency": settings["currency"],
+        "currency": display_currency,
         "monthly_spend": monthly, "yearly_spend": yearly,
+        "monthly_by_currency": monthly_by_currency,
+        "spend_is_partial": any(k != display_currency for k in monthly_by_currency),
         "active_count": len(active), "total_count": len(subs),
         "renewals_30d": renewals, "trials_ending": trials,
         "category_breakdown": [{"category": k, "amount": round(v, 2)} for k, v in
                                sorted(cats.items(), key=lambda x: -x[1])],
         "top_category": top_category, "overlaps": overlaps,
-        "price_increases": increases, "watchlist_count": len(watch),
+        "price_increases": increases, "watchlist_count": len([p for p in watch if p.get("status") not in ("Subscribed", "Moved to plans")]),
     }
 
 
