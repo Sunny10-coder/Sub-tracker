@@ -1,6 +1,6 @@
 name: SubMind Metro Android 11 Inbox and Deadline APK
 
-# Android build 11: Subscription deadlines and Inbox removal (verified source).
+# Android build 11: verified deadline ordering, removable Inbox and repeat-Ignore fix.
 
 on:
   push:
