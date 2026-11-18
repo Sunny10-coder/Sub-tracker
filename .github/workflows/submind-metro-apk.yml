@@ -1,11 +1,11 @@
-name: SubMind Metro installable APK
+name: SubMind Metro Android 10 home widget APK
 
-# Instagram caption, transcript, and shared-link improvements (Android build 9).
+# Android build 10: Metro 3-section launcher widget, notes, review save fixes.
 
 on:
   push:
     branches:
-      - feature/submind-metro-live-tiles-lifecycle-20261118
+      - feature/submind-android-home-widget-review-fix-20261118
     paths:
       - .github/workflows/submind-metro-apk.yml
   workflow_dispatch:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: submind-metro-installable-apk
+  group: submind-android-overview-widget-apk
   cancel-in-progress: true
 
 jobs:
@@ -49,6 +49,13 @@ jobs:
         run: npx expo export --platform android
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
+      - name: Verify native widget registration
+        run: |
+          test -f android/app/src/main/res/layout/submind_home_widget.xml
+          test -f android/app/src/main/res/xml/submind_home_widget_info.xml
+          test -f android/app/src/main/java/com/submind/metro/SubMindWidgetProvider.kt
+          grep -q 'SubMindWidgetProvider' android/app/src/main/AndroidManifest.xml
+          grep -q 'SubMindWidgetPackage' android/app/src/main/java/com/submind/metro/MainApplication.kt
       - name: Accept SDK licenses
         working-directory: .
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
@@ -72,7 +79,7 @@ jobs:
       - name: Upload SubMind Metro APK
         uses: actions/upload-artifact@v4
         with:
-          name: SubMind-Metro-Live-Tiles-Android-APK
+          name: SubMind-Metro-Android10-Overview-Widget-APK
           path: |
             frontend/android/app/build/outputs/apk/release/*.apk
             frontend/apk-signature.txt
